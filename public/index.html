@@ -26,12 +26,27 @@
 import { upload } from 'https://esm.sh/@vercel/blob@2.8.0/client';
 
 const app = document.getElementById('app');
-let pw = localStorage.getItem('pw') || prompt('Mot de passe');
-localStorage.setItem('pw', pw);
+let pw = localStorage.getItem('pw');
+
+function showLogin(error = '') {
+  app.innerHTML = `<h1>Mes voyages</h1>
+    <form class="bar" id="login"><input name="pw" type="password" placeholder="Mot de passe" autocomplete="current-password" required autofocus><button>Entrer</button></form>
+    <p style="color:#c00">${error}</p>`;
+  app.querySelector('#login').onsubmit = e => {
+    e.preventDefault();
+    pw = e.target.pw.value;
+    localStorage.setItem('pw', pw);
+    route();
+  };
+}
 
 async function api(q = '', opts = {}) {
   const r = await fetch('/api/trips' + q, { ...opts, headers: { 'x-password': pw, 'content-type': 'application/json' } });
-  if (r.status === 401) { localStorage.removeItem('pw'); location.reload(); }
+  if (r.status === 401) {
+    localStorage.removeItem('pw');
+    showLogin('Mot de passe incorrect');
+    throw new Error('401');
+  }
   return r.json();
 }
 const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
@@ -135,7 +150,11 @@ async function showTrip(trip) {
   loadItems();
 }
 
-const route = () => { const t = decodeURIComponent(location.hash.slice(1)); t ? showTrip(t) : showTrips(); };
+const route = () => {
+  if (!pw) return showLogin();
+  const t = decodeURIComponent(location.hash.slice(1));
+  t ? showTrip(t) : showTrips();
+};
 addEventListener('hashchange', route);
 route();
 </script>
