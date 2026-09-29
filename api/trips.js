@@ -1,6 +1,7 @@
-import { list, put, del } from '@vercel/blob';
+import { list, put, del, issueSignedToken, presignUrl } from '@vercel/blob';
 
-// Un voyage = un "dossier" trips/<nom>/ dans Vercel Blob. Pas de base de données.
+// Un voyage = un "dossier" trips/<nom>/ dans Vercel Blob (store privé). Pas de base de données.
+// ponytail: pas d'authentification pour l'instant, n'importe qui avec l'URL peut lire/modifier.
 async function listAll(opts) {
   const blobs = [], folders = [];
   let cursor;
@@ -14,9 +15,6 @@ async function listAll(opts) {
 }
 
 export default async function handler(req, res) {
-  if (!process.env.APP_PASSWORD || req.headers['x-password'] !== process.env.APP_PASSWORD)
-    return res.status(401).json({ error: 'Mot de passe incorrect' });
-
   const { trip, url } = req.query;
 
   if (req.method === 'GET') {
@@ -24,14 +22,17 @@ export default async function handler(req, res) {
       const { folders } = await listAll({ prefix: 'trips/', mode: 'folded' });
       return res.json(folders.map(f => f.slice('trips/'.length, -1)));
     }
-    const { blobs } = await listAll({ prefix: `trips/${trip}/` });
-    return res.json(blobs.filter(b => !b.pathname.endsWith('/.keep')));
+    const blobs = (await listAll({ prefix: `trips/${trip}/` })).blobs.filter(b => !b.pathname.endsWith('/.keep'));
+    // Store privé : liens de lecture signés, valables 1 h.
+    const token = await issueSignedToken({ pathname: '*', operations: ['get'] });
+    for (const b of blobs) b.src = (await presignUrl(token, { operation: 'get', pathname: b.pathname, access: 'private' })).presignedUrl;
+    return res.json(blobs);
   }
 
   if (req.method === 'POST') {
     const name = String(req.body?.name || '').trim();
     if (!name || name.includes('/')) return res.status(400).json({ error: 'Nom invalide' });
-    await put(`trips/${name}/.keep`, '.', { access: 'public', addRandomSuffix: false, allowOverwrite: true });
+    await put(`trips/${name}/.keep`, '.', { access: 'private', addRandomSuffix: false, allowOverwrite: true });
     return res.json({ name });
   }
 

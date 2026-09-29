@@ -23,31 +23,15 @@
 <body>
 <main id="app"></main>
 <script type="module">
-import { upload } from 'https://esm.sh/@vercel/blob@2.8.0/client';
+import { uploadPresigned } from 'https://esm.sh/@vercel/blob@2.8.0/client';
 
 const app = document.getElementById('app');
-let pw = localStorage.getItem('pw');
-
-function showLogin(error = '') {
-  app.innerHTML = `<h1>Mes voyages</h1>
-    <form class="bar" id="login"><input name="pw" type="password" placeholder="Mot de passe" autocomplete="current-password" required autofocus><button>Entrer</button></form>
-    <p style="color:#c00">${error}</p>`;
-  app.querySelector('#login').onsubmit = e => {
-    e.preventDefault();
-    pw = e.target.pw.value;
-    localStorage.setItem('pw', pw);
-    route();
-  };
-}
 
 async function api(q = '', opts = {}) {
-  const r = await fetch('/api/trips' + q, { ...opts, headers: { 'x-password': pw, 'content-type': 'application/json' } });
-  if (r.status === 401) {
-    localStorage.removeItem('pw');
-    showLogin('Mot de passe incorrect');
-    throw new Error('401');
-  }
-  return r.json();
+  const r = await fetch('/api/trips' + q, { ...opts, headers: { 'content-type': 'application/json' } });
+  const json = await r.json();
+  if (!r.ok) { alert(json.error || 'Erreur'); throw new Error(json.error); }
+  return json;
 }
 const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 
@@ -81,7 +65,7 @@ async function showTrip(trip) {
   async function send(files) {
     for (const [i, f] of [...files].entries()) {
       status.textContent = `Envoi ${i + 1}/${files.length} : ${f.name}…`;
-      await upload(`trips/${trip}/${f.name}`, f, { access: 'public', handleUploadUrl: '/api/upload', clientPayload: pw });
+      await uploadPresigned(`trips/${trip}/${f.name}`, f, { access: 'private', handleUploadUrl: '/api/upload' });
     }
     status.textContent = '';
     loadItems();
@@ -131,11 +115,11 @@ async function showTrip(trip) {
       const ext = b.pathname.split('.').pop().toLowerCase();
       const el = document.createElement('div');
       el.className = 'item';
-      if (/^(jpe?g|png|gif|webp|avif|heic)$/.test(ext)) el.innerHTML = `<a href="${b.url}" target="_blank"><img src="${b.url}" loading="lazy"></a>`;
-      else if (/^(mp4|mov|webm|m4v)$/.test(ext)) el.innerHTML = `<video src="${b.url}" controls preload="metadata"></video>`;
-      else if (/^(weba|m4a|mp3|wav|ogg|aac|opus)$/.test(ext)) el.innerHTML = `<audio src="${b.url}" controls></audio>`;
-      else if (ext === 'txt') { el.innerHTML = '<pre></pre>'; fetch(b.url).then(r => r.text()).then(t => el.firstChild.textContent = t); }
-      else el.innerHTML = `<a href="${b.url}" target="_blank">${esc(b.pathname.split('/').pop())}</a>`;
+      if (/^(jpe?g|png|gif|webp|avif|heic)$/.test(ext)) el.innerHTML = `<a href="${b.src}" target="_blank"><img src="${b.src}" loading="lazy"></a>`;
+      else if (/^(mp4|mov|webm|m4v)$/.test(ext)) el.innerHTML = `<video src="${b.src}" controls preload="metadata"></video>`;
+      else if (/^(weba|m4a|mp3|wav|ogg|aac|opus)$/.test(ext)) el.innerHTML = `<audio src="${b.src}" controls></audio>`;
+      else if (ext === 'txt') { el.innerHTML = '<pre></pre>'; fetch(b.src).then(r => r.text()).then(t => el.firstChild.textContent = t); }
+      else el.innerHTML = `<a href="${b.src}" target="_blank">${esc(b.pathname.split('/').pop())}</a>`;
       const del = document.createElement('button');
       del.className = 'del'; del.textContent = '✕';
       del.onclick = async () => {
@@ -151,7 +135,6 @@ async function showTrip(trip) {
 }
 
 const route = () => {
-  if (!pw) return showLogin();
   const t = decodeURIComponent(location.hash.slice(1));
   t ? showTrip(t) : showTrips();
 };
