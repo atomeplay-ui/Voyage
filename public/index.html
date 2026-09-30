@@ -44,7 +44,7 @@
   button { cursor: pointer; border: 0; background: none; }
 
   /* Matière verre partagée : réservée à la navigation et aux contrôles (règle Apple Liquid Glass) */
-  .top, #drawer, #note, #toast, .tabs, .map-sheet {
+  #drawer, #note, #toast, .tabs, .map-sheet {
     background: var(--glass);
     -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid var(--glass-border);
@@ -60,7 +60,7 @@
   /* Barre du haut flottante */
   .top { position: sticky; z-index: 10; top: calc(env(safe-area-inset-top) + 8px); margin: calc(env(safe-area-inset-top) + 8px) 10px 0;
     height: var(--top-h); padding: 0 6px; border-radius: 999px; display: flex; align-items: center; gap: 6px; }
-  .top h1 { flex: 1; margin: 0; font-size: 17px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top h1 { flex: 1; margin: 0; font-size: 17px; font-weight: 600; text-shadow: 0 1px 2px rgba(255,255,255,.4); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .icon { width: 44px; height: 44px; border-radius: 50%; font-size: 18px; display: grid; place-items: center; }
   .top .icon { background: var(--glass-press); }
   #delTrip { color: var(--danger); }
@@ -224,26 +224,27 @@
   .item.audio .del { background: var(--glass-strong); }
   .empty { grid-column: 1 / -1; }
 
-  /* Barre d'actions flottante en « vrai » Liquid Glass : verre presque transparent au centre (on voit le contenu),
+  /* « Vrai » Liquid Glass (barres du haut et du bas) : verre presque transparent au centre (on voit le contenu),
      bords épais qui floutent et déforment comme une lentille, reflet brillant et liseré lumineux */
-  #actions { position: fixed; z-index: 10; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 14px); transform: translateX(-50%);
-    display: flex; gap: 4px; padding: 6px; border-radius: 999px;
-    background: linear-gradient(135deg, rgba(255,255,255,.26), rgba(255,255,255,.05) 60%, rgba(255,255,255,.14));
+  .lg { background: linear-gradient(135deg, rgba(255,255,255,.26), rgba(255,255,255,.05) 60%, rgba(255,255,255,.14));
     box-shadow: inset 1.5px 1.5px 0 rgba(255,255,255,.8), inset -1px -1px 0 rgba(255,255,255,.3), inset 0 0 14px rgba(255,255,255,.28),
       0 10px 30px rgba(20,30,60,.22), 0 2px 6px rgba(20,30,60,.12); }
   /* Épaisseur du verre : un seul calque qui voit la page, masqué pour être presque net au centre et flou, saturé sur le pourtour */
-  #actions::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  .lg::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
     -webkit-backdrop-filter: blur(8px) saturate(210%) brightness(1.05); backdrop-filter: blur(8px) saturate(210%) brightness(1.05);
     -webkit-mask: radial-gradient(closest-side, rgba(0,0,0,.28) 55%, #000 100%); mask: radial-gradient(closest-side, rgba(0,0,0,.28) 55%, #000 100%); }
   /* Reflet spéculaire en haut à gauche */
-  #actions::after { content: ''; position: absolute; inset: 1px; z-index: -1; border-radius: inherit; pointer-events: none;
+  .lg::after { content: ''; position: absolute; inset: 1px; z-index: -1; border-radius: inherit; pointer-events: none;
     background: radial-gradient(ellipse 60% 55% at 22% 0%, rgba(255,255,255,.55), transparent 70%),
       radial-gradient(ellipse 40% 40% at 90% 100%, rgba(255,255,255,.18), transparent 70%); }
   @media (prefers-color-scheme: dark) {
-    #actions { background: linear-gradient(135deg, rgba(255,255,255,.14), rgba(255,255,255,.02) 60%, rgba(255,255,255,.07));
+    .lg { background: linear-gradient(135deg, rgba(255,255,255,.14), rgba(255,255,255,.02) 60%, rgba(255,255,255,.07));
       box-shadow: inset 1.5px 1.5px 0 rgba(255,255,255,.35), inset -1px -1px 0 rgba(255,255,255,.12), inset 0 0 14px rgba(255,255,255,.1), 0 10px 30px rgba(0,0,0,.5); }
-    #actions::after { background: radial-gradient(ellipse 60% 55% at 22% 0%, rgba(255,255,255,.22), transparent 70%); }
+    .lg::after { background: radial-gradient(ellipse 60% 55% at 22% 0%, rgba(255,255,255,.22), transparent 70%); }
   }
+  /* Barre d'actions flottante */
+  #actions { position: fixed; z-index: 10; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 14px); transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 6px; border-radius: 999px; }
   #actions > * { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 88px; padding: 7px 18px; border-radius: 999px; font-size: 11px; font-weight: 600;
     color: var(--text); text-shadow: 0 1px 2px rgba(255,255,255,.4); }
   #actions i { font-size: 20px; height: 24px; display: grid; place-items: center; }
@@ -330,7 +331,7 @@
 </style>
 </head>
 <body>
-<header class="top">
+<header class="top lg">
   <button class="icon" id="menuBtn" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
   <h1 id="title">Mes voyages</h1>
   <button class="icon" id="delTrip" aria-label="Supprimer le voyage" hidden><i class="fa-solid fa-trash-can"></i></button>
@@ -345,7 +346,7 @@
 
 <main id="main"></main>
 
-<footer id="actions" hidden>
+<footer id="actions" class="lg" hidden>
   <button id="camBtn"><i class="fa-solid fa-camera"></i>Caméra</button>
   <button id="rec"><i class="fa-solid fa-microphone"></i><b>Audio</b></button>
 </footer>
