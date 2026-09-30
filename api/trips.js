@@ -33,7 +33,8 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const name = String(req.body?.name || '').trim();
     if (!name || name.includes('/')) return res.status(400).json({ error: 'Nom invalide' });
-    await createFolder(`trips/${name}/`, { access: 'private' });
+    // Un voyage du même nom existe déjà : rien à créer
+    await createFolder(`trips/${name}/`, { access: 'private' }).catch(e => { if (!/exist/i.test(e.message)) throw e; });
     return res.json({ name });
   }
 
