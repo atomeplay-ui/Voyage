@@ -151,7 +151,8 @@ async function api(q = '', opts = {}) {
 }
 
 // Menu
-const setMenu = open => document.body.classList.toggle('menu-open', open);
+// Accolades volontaires : un onclick qui renvoie false annule le clic (le lien ne s'ouvrait plus).
+const setMenu = open => { document.body.classList.toggle('menu-open', open); };
 $('#menuBtn').onclick = () => setMenu(true);
 $('#backdrop').onclick = () => setMenu(false);
 
