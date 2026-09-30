@@ -1,4 +1,4 @@
-import { list, put, del, issueSignedToken, presignUrl } from '@vercel/blob';
+import { list, createFolder, del, issueSignedToken, presignUrl } from '@vercel/blob';
 
 // Un voyage = un "dossier" trips/<nom>/ dans Vercel Blob (store privé). Pas de base de données.
 // ponytail: pas d'authentification pour l'instant, n'importe qui avec l'URL peut lire/modifier.
@@ -22,7 +22,8 @@ export default async function handler(req, res) {
       const { folders } = await listAll({ prefix: 'trips/', mode: 'folded' });
       return res.json(folders.map(f => f.slice('trips/'.length, -1)));
     }
-    const blobs = (await listAll({ prefix: `trips/${trip}/` })).blobs.filter(b => !b.pathname.endsWith('/.keep'));
+    // Ignore le dossier lui-même (et les anciens fichiers .keep des premiers voyages)
+    const blobs = (await listAll({ prefix: `trips/${trip}/` })).blobs.filter(b => !/\/(\.keep)?$/.test(b.pathname));
     // Store privé : liens de lecture signés, valables 1 h.
     const token = await issueSignedToken({ pathname: '*', operations: ['get'] });
     for (const b of blobs) b.src = (await presignUrl(token, { operation: 'get', pathname: b.pathname, access: 'private' })).presignedUrl;
@@ -32,7 +33,7 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const name = String(req.body?.name || '').trim();
     if (!name || name.includes('/')) return res.status(400).json({ error: 'Nom invalide' });
-    await put(`trips/${name}/.keep`, '.', { access: 'private', addRandomSuffix: false, allowOverwrite: true });
+    await createFolder(`trips/${name}/`, { access: 'private' });
     return res.json({ name });
   }
 

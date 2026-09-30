@@ -59,7 +59,6 @@
   .icon { width: 44px; height: 44px; border-radius: 50%; font-size: 18px; display: grid; place-items: center; }
   .top .icon { background: var(--glass-press); }
   #delTrip { color: var(--danger); }
-  .top .spacer { width: 44px; }
 
   /* Menu latéral en verre */
   #drawer { position: fixed; z-index: 30; top: calc(env(safe-area-inset-top) + 8px); bottom: calc(env(safe-area-inset-bottom) + 8px); left: 8px;
@@ -97,7 +96,7 @@
   .item { position: relative; border-radius: 22px; padding: 0; }
   .item.wide { grid-column: 1 / -1; padding: 14px 52px 14px 16px; }
   .item.float { grid-column: span var(--span, 3); padding: 6px; border-radius: 20px; margin-top: var(--dy, 0); align-self: start; }
-  .item.float img, .item.float video { display: block; width: 100%; aspect-ratio: var(--ar, 1); object-fit: cover; border-radius: 14px; background: #000; }
+  .item.float img, .item.float video { display: block; width: 100%; aspect-ratio: var(--ar, 1); object-fit: cover; border-radius: 14px; background: #000; cursor: zoom-in; }
   .item.float, .item.audio { transform: translateX(var(--dx, 0)) rotate(var(--r, 0deg)); animation: float var(--d, 6s) ease-in-out var(--delay, 0s) infinite; }
   .item.float:active, .item.float:hover { z-index: 3; }
   @keyframes float {
@@ -105,7 +104,6 @@
     50% { transform: translate(var(--dx, 0), -7px) rotate(calc(var(--r, 0deg) * .6)); }
   }
   @media (prefers-reduced-motion: reduce) { .item.float, .item.audio { animation: none; } }
-  .item.float img, .item.float video { cursor: zoom-in; }
   .play-badge { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
     color: #fff; font-size: 16px; pointer-events: none; background: rgba(0,0,0,.3); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.35); }
   .play-badge i { margin-left: 3px; }
@@ -145,8 +143,8 @@
   .ring i { font-size: 22px; color: var(--accent); }
   .ring .fa-play { margin-left: 4px; }
   .item.audio.playing .ring { box-shadow: inset 0 1px 0 var(--glass-hi), 0 0 0 6px color-mix(in srgb, var(--accent) 18%, transparent), var(--shadow); }
-  .item.audio .len { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
-  .item.audio .del { top: -4px; right: calc(50% - 50px); width: 26px; height: 26px; font-size: 11px; color: var(--text); background: var(--glass-strong); border-color: var(--glass-border); }
+  .item.audio .len { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); cursor: zoom-in; }
+  .item.audio .del { top: -4px; right: calc(50% - 50px); width: 26px; height: 26px; font-size: 11px; }
   .item pre { margin: 0; white-space: pre-wrap; font-family: inherit; line-height: 1.45; }
   .item time { display: block; font-size: 12px; color: var(--muted); margin-top: 6px; }
   /* Note flottante : carte de verre avec guillemet, texte coupé au-delà de 8 lignes */
@@ -154,8 +152,7 @@
   .item.note > i { color: var(--accent); font-size: 16px; opacity: .8; }
   .item.note pre { margin-top: 6px; font-size: 14px; cursor: zoom-in; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
   .item.note time { font-size: 11px; }
-  .item.note .del { top: 6px; right: 6px; width: 26px; height: 26px; font-size: 11px; color: var(--text); background: var(--glass-press); border-color: var(--glass-border); }
-  .item.audio .len { cursor: zoom-in; }
+  .item.note .del { top: 6px; right: 6px; width: 26px; height: 26px; font-size: 11px; }
   /* Grand lecteur audio de la visionneuse */
   .audio-big { display: flex; flex-direction: column; align-items: center; gap: 14px; }
   .audio-big .ring { width: min(240px, 62vw); height: min(240px, 62vw); border-radius: 50%; display: grid; place-items: center; position: relative; }
@@ -172,7 +169,8 @@
   .note-big time { display: block; margin-top: 14px; font-size: 13px; opacity: .65; }
   .del { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 50%; color: #fff; font-size: 13px;
     background: rgba(0,0,0,.28); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.3); }
-  .item.wide .del { color: var(--text); background: var(--glass-press); border-color: var(--glass-border); }
+  .item:is(.audio, .note, .wide) .del { color: var(--text); background: var(--glass-press); border-color: var(--glass-border); }
+  .item.audio .del { background: var(--glass-strong); }
   .empty { grid-column: 1 / -1; }
 
   /* Barre d'actions flottante (capsule) */
@@ -197,8 +195,10 @@
     touch-action: none; user-select: none; -webkit-user-select: none; }
   .cam-glass { background: rgba(255,255,255,.14); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
     border: 1px solid rgba(255,255,255,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
-  .cam-top { position: absolute; z-index: 1; inset: 0 0 auto 0; padding: calc(env(safe-area-inset-top) + 10px) 14px 0; display: flex; align-items: center; justify-content: space-between; }
-  .cam-top button, .cam-top span.spacer { width: 44px; height: 44px; border-radius: 50%; color: #fff; font-size: 20px; }
+  .cam-top { position: absolute; z-index: 1; inset: 0 0 auto 0; padding: calc(env(safe-area-inset-top) + 10px) 14px 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+  .cam-top > div { display: flex; gap: 10px; }
+  .cam-top > div:last-child { justify-content: flex-end; }
+  .cam-top button { width: 44px; height: 44px; border-radius: 50%; color: #fff; font-size: 20px; }
   #camRec.on { background: var(--danger); border-color: transparent; animation: pulse 1.2s infinite; }
   #cam.rec #camRec { visibility: hidden; }
   #camTimer { font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; padding: 6px 14px; border-radius: 999px; }
@@ -206,7 +206,6 @@
   #cam.rec #camTimer { background: var(--danger); border-color: transparent; }
   .cam-view { flex: 1; position: relative; overflow: hidden; }
   #camView { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .1s; }
-  #cam.front #camView { transform: scaleX(-1); }
   #cam.flash #camView { opacity: 0; }
   .cam-bottom { position: absolute; inset: auto 0 0 0; padding: 0 0 calc(env(safe-area-inset-bottom) + 24px); }
   .modes { display: flex; gap: 22px; height: 38px; align-items: center; transition: transform .3s ease; width: 100%; }
@@ -225,9 +224,6 @@
   #shutter:active::after { transform: scale(.9); }
   #cam[data-mode=video] #shutter::after { background: var(--danger); }
   #cam.rec #shutter::after { width: 42%; height: 42%; border-radius: 6px; }
-  .cam-top { display: grid; grid-template-columns: 1fr auto 1fr; }
-  .cam-top > div { display: flex; gap: 10px; }
-  .cam-top > div:last-child { justify-content: flex-end; }
   /* Flash : éclair barré (désactivé), avec un « A » (auto), jaune (activé) */
   #camFlash { position: relative; display: grid; place-items: center; }
   #camFlash[data-flash=on] { color: #ffd60a; }
@@ -616,21 +612,29 @@ async function takePhoto() {
 
 const hms = s => [s / 3600, s / 60 % 60, s % 60].map(n => String(Math.floor(n)).padStart(2, '0')).join(':');
 
+// Enregistre un flux jusqu'à stop(), puis envoie le fichier (vidéo et audio)
+function record(stream, prefix, extOf, onStop) {
+  const r = new MediaRecorder(stream), chunks = [];
+  r.ondataavailable = e => chunks.push(e.data);
+  r.onstop = () => {
+    const type = (r.mimeType || (stream.getVideoTracks().length ? 'video/webm' : 'audio/webm')).split(';')[0];
+    onStop();
+    send([new File(chunks, `${prefix}-${Date.now()}.${extOf(type)}`, { type })]);
+  };
+  r.start();
+  return r;
+}
+
 function toggleVideo() {
   if (camRec) return camRec.stop();
   if (!camStream) return;
-  const chunks = [], start = Date.now();
-  camRec = new MediaRecorder(camStream);
-  camRec.ondataavailable = e => chunks.push(e.data);
-  camRec.onstop = () => {
-    const type = (camRec.mimeType || 'video/webm').split(';')[0];
+  const start = Date.now();
+  camRec = record(camStream, 'video', t => t.includes('mp4') ? 'mp4' : 'webm', () => {
     camRec = null;
     clearInterval(camTick);
     camTimer.textContent = hms(0);
     cam.classList.remove('rec');
-    send([new File(chunks, `video-${Date.now()}.${type.includes('mp4') ? 'mp4' : 'webm'}`, { type })]);
-  };
-  camRec.start();
+  });
   cam.classList.add('rec');
   camTick = setInterval(() => { camTimer.textContent = hms((Date.now() - start) / 1000); }, 500);
 }
@@ -650,17 +654,15 @@ cam.addEventListener('touchend', e => {
   touchX = null;
   if (Math.abs(dx) > 50) setMode(dx > 0 ? 'video' : 'photo');
 });
-addEventListener('keydown', e => e.key === 'Escape' && !cam.hidden && closeCam());
 
 // Pincer l'aperçu pour zoomer : même zoom que la barre d'objectifs
 let camPinch = null;
-const camDist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 const camViewBox = $('.cam-view');
 camViewBox.addEventListener('touchstart', e => {
-  if (e.touches.length === 2 && lens.stops.length) camPinch = { d0: camDist(e.touches), z0: lens.z };
+  if (e.touches.length === 2 && lens.stops.length) camPinch = { d0: dist(...e.touches), z0: lens.z };
 }, { passive: true });
 camViewBox.addEventListener('touchmove', e => {
-  if (camPinch && e.touches.length === 2) setZoom(camPinch.z0 * camDist(e.touches) / camPinch.d0, false);
+  if (camPinch && e.touches.length === 2) setZoom(camPinch.z0 * dist(...e.touches) / camPinch.d0, false);
 }, { passive: true });
 camViewBox.addEventListener('touchend', e => {
   if (camPinch && e.touches.length < 2) { camPinch = null; setZoom(lens.z, true); }
@@ -681,18 +683,11 @@ function setRecUI(on) {
 recBtns.forEach(b => b.onclick = async () => {
   if (rec) return rec.stop();
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  rec = new MediaRecorder(stream);
-  const chunks = [];
-  rec.ondataavailable = e => chunks.push(e.data);
-  rec.onstop = () => {
+  rec = record(stream, 'audio', t => t.includes('mp4') ? 'm4a' : t.includes('ogg') ? 'ogg' : 'weba', () => {
     stream.getTracks().forEach(t => t.stop());
-    const type = rec.mimeType.split(';')[0];
-    const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'weba';
     rec = null;
     setRecUI(false);
-    send([new File(chunks, `audio-${Date.now()}.${ext}`, { type })]);
-  };
-  rec.start();
+  });
   setRecUI(true);
 });
 
@@ -909,6 +904,7 @@ $('#viewerClose').onclick = closeViewer;
 $('#viewerPrev').onclick = () => viewerGo(-1);
 $('#viewerNext').onclick = () => viewerGo(1);
 addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !cam.hidden) return closeCam();
   if (viewer.hidden) return;
   if (e.key === 'Escape') closeViewer();
   if (e.key === 'ArrowLeft') viewerGo(-1);
@@ -920,7 +916,7 @@ async function loadItems(trip) {
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
   const box = $('#items');
   if (!box || currentTrip() !== trip) return;
-  box.innerHTML = blobs.length ? '' : '<p class="empty" style="grid-column:1/-1">Ce voyage est vide.<br>Ajoutez une photo, une vidéo, un audio ou une note.</p>';
+  box.innerHTML = blobs.length ? '' : '<p class="empty">Ce voyage est vide.<br>Ajoutez une photo, une vidéo, un audio ou une note.</p>';
   const media = []; // photos et vidéos, dans l'ordre d'affichage, pour la visionneuse
   for (const b of blobs) {
     const ext = b.pathname.split('.').pop().toLowerCase();
