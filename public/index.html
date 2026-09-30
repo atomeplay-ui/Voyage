@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0f766e">
 <title>Mes voyages</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css">
 <style>
   :root {
     --bg: #f4f5f7; --card: #fff; --text: #1a1d21; --muted: #6b7280; --line: #e5e7eb;
@@ -38,14 +39,14 @@
   #new input { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
   #new button { padding: 0 16px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 600; }
   #tripList { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
-  #tripList a { display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 12px; text-decoration: none; color: inherit; }
+  #tripList a { display: flex; font-size: 16px; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 12px; text-decoration: none; color: inherit; }
   #tripList a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
   .empty-list { color: var(--muted); padding: 12px; }
 
   /* Contenu */
   main { padding: 12px 12px calc(var(--bar-h) + env(safe-area-inset-bottom) + 16px); max-width: 900px; margin: auto; }
   .welcome { text-align: center; color: var(--muted); margin-top: 20vh; padding: 0 24px; }
-  .welcome div { font-size: 56px; }
+  .welcome i { font-size: 56px; color: var(--accent); }
   #note { display: flex; gap: 8px; align-items: flex-end; background: var(--card); border-radius: 16px; padding: 8px; margin-bottom: 12px; }
   #note textarea { flex: 1; border: 0; background: none; resize: none; min-height: 44px; max-height: 40vh; padding: 10px; outline: none; field-sizing: content; }
   #note button { height: 44px; padding: 0 14px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 600; }
@@ -64,7 +65,7 @@
   #actions { position: fixed; z-index: 10; inset: auto 0 0 0; display: flex; justify-content: space-around;
     padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line); }
   #actions > * { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 12px; font-size: 12px; color: var(--muted); cursor: pointer; }
-  #actions span { font-size: 26px; }
+  #actions i { font-size: 22px; height: 28px; display: grid; place-items: center; }
   #actions b { font-weight: inherit; }
   #actions > *:active { background: var(--line); }
   #actions input { display: none; }
@@ -85,14 +86,14 @@
 </head>
 <body>
 <header class="top">
-  <button class="icon" id="menuBtn" aria-label="Menu">☰</button>
+  <button class="icon" id="menuBtn" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
   <h1 id="title">Mes voyages</h1>
-  <button class="icon" id="delTrip" aria-label="Supprimer le voyage" hidden>🗑️</button>
+  <button class="icon" id="delTrip" aria-label="Supprimer le voyage" hidden><i class="fa-solid fa-trash-can"></i></button>
 </header>
 
 <nav id="drawer">
-  <h2>🧳 Mes voyages</h2>
-  <form id="new"><input name="name" placeholder="Nouveau voyage" required><button aria-label="Créer">＋</button></form>
+  <h2><i class="fa-solid fa-suitcase-rolling"></i> Mes voyages</h2>
+  <form id="new"><input name="name" placeholder="Nouveau voyage" required><button aria-label="Créer"><i class="fa-solid fa-plus"></i></button></form>
   <ul id="tripList"></ul>
 </nav>
 <div id="backdrop"></div>
@@ -100,10 +101,10 @@
 <main id="main"></main>
 
 <footer id="actions" hidden>
-  <label><span>📷</span>Photo<input type="file" accept="image/*" capture="environment"></label>
-  <label><span>🎥</span>Vidéo<input type="file" accept="video/*" capture="environment"></label>
-  <button id="rec"><span>🎙️</span><b>Audio</b></button>
-  <label><span>📁</span>Importer<input type="file" multiple accept="image/*,video/*,audio/*,text/plain"></label>
+  <label><i class="fa-solid fa-camera"></i>Photo<input type="file" accept="image/*" capture="environment"></label>
+  <label><i class="fa-solid fa-video"></i>Vidéo<input type="file" accept="video/*" capture="environment"></label>
+  <button id="rec"><i class="fa-solid fa-microphone"></i><b>Audio</b></button>
+  <label><i class="fa-solid fa-file-import"></i>Importer<input type="file" multiple accept="image/*,video/*,audio/*,text/plain"></label>
 </footer>
 <div id="toast" hidden></div>
 
@@ -131,7 +132,7 @@ async function loadTrips() {
   const trips = await api();
   const cur = currentTrip();
   $('#tripList').innerHTML = trips.length
-    ? trips.map(t => `<li><a href="#${encodeURIComponent(t)}" class="${t === cur ? 'active' : ''}">📁 ${esc(t)}</a></li>`).join('')
+    ? trips.map(t => `<li><a href="#${encodeURIComponent(t)}" class="${t === cur ? 'active' : ''}"><i class="fa-solid ${t === cur ? 'fa-folder-open' : 'fa-folder'}"></i> ${esc(t)}</a></li>`).join('')
     : '<li class="empty-list">Aucun voyage pour l’instant.</li>';
 }
 $('#tripList').onclick = e => e.target.closest('a') && setMenu(false);
@@ -176,11 +177,11 @@ recBtn.onclick = async () => {
     const type = rec.mimeType.split(';')[0];
     const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'weba';
     rec = null;
-    recBtn.classList.remove('on'); recBtn.querySelector('b').textContent = 'Audio';
+    recBtn.classList.remove('on'); recBtn.querySelector('b').textContent = 'Audio'; recBtn.querySelector('i').className = 'fa-solid fa-microphone';
     send([new File(chunks, `audio-${Date.now()}.${ext}`, { type })]);
   };
   rec.start();
-  recBtn.classList.add('on'); recBtn.querySelector('b').textContent = 'Arrêter';
+  recBtn.classList.add('on'); recBtn.querySelector('b').textContent = 'Arrêter'; recBtn.querySelector('i').className = 'fa-solid fa-stop';
 };
 
 $('#delTrip').onclick = async () => {
@@ -224,7 +225,7 @@ async function loadItems(trip) {
       else el.innerHTML = `<a href="${b.src}" target="_blank">${esc(b.pathname.split('/').pop())}</a>`;
     }
     const del = document.createElement('button');
-    del.className = 'del'; del.textContent = '✕'; del.setAttribute('aria-label', 'Supprimer');
+    del.className = 'del'; del.innerHTML = '<i class="fa-solid fa-xmark"></i>'; del.setAttribute('aria-label', 'Supprimer');
     del.onclick = async () => {
       if (!confirm('Supprimer ce média ?')) return;
       await api(`?url=${encodeURIComponent(b.url)}`, { method: 'DELETE' });
@@ -242,7 +243,7 @@ function route() {
   loadTrips();
   setMenu(!trip);
   if (trip) return showTrip(trip);
-  main.innerHTML = '<div class="welcome"><div>🧳</div><p>Ouvrez le menu pour choisir ou créer un voyage.</p></div>';
+  main.innerHTML = '<div class="welcome"><i class="fa-solid fa-suitcase-rolling"></i><p>Ouvrez le menu pour choisir ou créer un voyage.</p></div>';
 }
 addEventListener('hashchange', route);
 route();
