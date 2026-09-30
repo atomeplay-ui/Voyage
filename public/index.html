@@ -7,6 +7,8 @@
 <meta name="theme-color" content="#07080c" media="(prefers-color-scheme: dark)">
 <title>Mes voyages</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
 <style>
   /* Style « Liquid Glass » : panneaux de verre translucides flottant sur un fond coloré */
   :root {
@@ -43,7 +45,7 @@
   button { cursor: pointer; border: 0; background: none; }
 
   /* Matière verre partagée : réservée à la navigation et aux contrôles (règle Apple Liquid Glass) */
-  .top, #drawer, #actions, #note, #toast {
+  .top, #drawer, #actions, #note, #toast, .tabs {
     background: var(--glass);
     -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid var(--glass-border);
@@ -96,6 +98,24 @@
   #note textarea::placeholder { color: var(--muted); }
   #note button { height: 44px; padding: 0 18px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 600;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 6px 16px rgba(0,122,255,.3); }
+  /* Onglets Souvenirs / Carte */
+  .tabs { display: flex; gap: 2px; width: max-content; margin: 0 auto 12px; padding: 3px; border-radius: 999px; }
+  .tabs button { padding: 7px 20px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--muted); transition: background .2s, color .2s; }
+  .tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  /* Carte (contenu : surface opaque, pas de verre) */
+  #map { height: calc(100dvh - 230px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); min-height: 320px; border-radius: 24px; overflow: hidden;
+    isolation: isolate; /* garde les calques Leaflet sous les barres, le menu et la visionneuse */
+    border: 1px solid var(--surface-line); box-shadow: var(--card-shadow); background: var(--surface); }
+  .map-empty { text-align: center; color: var(--muted); font-size: 14px; margin: 12px 20px 0; }
+  /* Point sur la carte : miniature façon Polaroid avec une pointe, et le nombre de médias à cet endroit */
+  .pin { border-radius: 14px; background: var(--surface); border: 3px solid var(--surface); box-shadow: 0 6px 16px rgba(0,0,0,.35); display: grid; place-items: center; }
+  .pin::after { content: ''; position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); border: 8px solid transparent; border-top-color: var(--surface); border-bottom: 0; }
+  .pin img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+  .pin i { color: var(--accent); font-size: 20px; }
+  .pin b { position: absolute; top: -9px; right: -9px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center;
+    background: var(--accent); color: #fff; font-size: 12px; border: 2px solid var(--surface); }
+  .leaflet-container { font: inherit; }
+
   /* Mur de médias « en vrac » : photos flottantes, audios ronds, notes en cartes */
   .grid { display: grid; grid-template-columns: repeat(6, 1fr); grid-auto-flow: dense; gap: 16px 12px; padding: 4px 4px 24px; }
   @media (min-width: 600px) { .grid { grid-template-columns: repeat(9, 1fr); } }
@@ -365,14 +385,54 @@ $('#new').onsubmit = async e => {
   location.hash = encodeURIComponent(name);
 };
 
-// Envoi des médias
-async function send(files) {
+// Localisation : position actuelle (gardée 2 min) pour ce qu'on capture ; null si refusée ou indisponible
+let lastPos = null;
+function here() {
+  if (lastPos && Date.now() - lastPos.t < 120000) return Promise.resolve(lastPos);
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(
+      p => res(lastPos = { lat: p.coords.latitude, lng: p.coords.longitude, t: Date.now() }),
+      () => res(null), { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+  });
+}
+
+// Coordonnées GPS des données EXIF d'une photo JPEG importée (null si absentes)
+async function exifGps(file) {
+  if (!/jpe?g/i.test(file.type)) return null;
+  const v = new DataView(await file.slice(0, 256 * 1024).arrayBuffer());
+  if (v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return null;
+  for (let o = 2; o + 10 < v.byteLength && v.getUint8(o) === 0xFF; o += 2 + v.getUint16(o + 2)) {
+    if (v.getUint16(o) !== 0xFFE1 || v.getUint32(o + 4) !== 0x45786966) continue; // segment APP1 « Exif »
+    const t = o + 10, le = v.getUint16(t) === 0x4949;
+    const u16 = p => v.getUint16(t + p, le), u32 = p => v.getUint32(t + p, le);
+    const entry = (ifd, id) => { for (let i = 0, n = u16(ifd); i < n; i++) if (u16(ifd + 2 + i * 12) === id) return ifd + 2 + i * 12; return null; };
+    const gpsPtr = entry(u32(4), 0x8825);
+    if (gpsPtr === null) return null;
+    const gps = u32(gpsPtr + 8);
+    const coord = (valId, refId) => {
+      const e = entry(gps, valId), r = entry(gps, refId);
+      if (e === null || r === null) return NaN;
+      const p = u32(e + 8), [d, m, s] = [0, 8, 16].map(k => u32(p + k) / u32(p + k + 4));
+      return (d + m / 60 + s / 3600) * (/[SW]/.test(String.fromCharCode(v.getUint8(t + r + 8))) ? -1 : 1);
+    };
+    const lat = coord(2, 1), lng = coord(4, 3);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  }
+  return null;
+}
+
+// Envoi des médias. live = pris dans l'appli (position actuelle) ; sinon position lue dans la photo importée.
+// Les coordonnées vont dans le nom du fichier (« photo-…@45.12345,6.12345.jpg ») : pas besoin de base de données.
+async function send(files, live) {
   const trip = currentTrip();
   try {
     for (const [i, f] of [...files].entries()) {
       toast.hidden = false;
       toast.textContent = `Envoi ${i + 1}/${files.length} : ${f.name}…`;
-      await uploadPresigned(`trips/${trip}/${f.name}`, f, { access: 'private', handleUploadUrl: '/api/upload' });
+      const pos = live ? await here() : await exifGps(f).catch(() => null);
+      const name = pos ? f.name.replace(/(\.\w+)?$/, `@${pos.lat.toFixed(5)},${pos.lng.toFixed(5)}$1`) : f.name;
+      await uploadPresigned(`trips/${trip}/${name}`, f, { access: 'private', handleUploadUrl: '/api/upload' });
     }
   } catch (e) {
     alert('Échec de l’envoi : ' + e.message);
@@ -581,6 +641,7 @@ function centerMode() {
 addEventListener('resize', centerMode);
 
 function openCam() {
+  here(); // demande la position dès l'ouverture, pour qu'elle soit prête au déclenchement
   cam.hidden = false;
   document.body.classList.add('cam-open');
   cam.dataset.mode = '';
@@ -618,7 +679,7 @@ async function takePhoto() {
     // Miniature de la dernière photo, comme sur iOS
     $('#camImport').style.backgroundImage = `url(${URL.createObjectURL(b)})`;
     $('#camImport').classList.add('thumb');
-    send([new File([b], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' })]);
+    send([new File([b], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' })], true);
   }, 'image/jpeg', 0.9);
 }
 
@@ -631,7 +692,7 @@ function record(stream, prefix, extOf, onStop) {
   r.onstop = () => {
     const type = (r.mimeType || (stream.getVideoTracks().length ? 'video/webm' : 'audio/webm')).split(';')[0];
     onStop();
-    send([new File(chunks, `${prefix}-${Date.now()}.${extOf(type)}`, { type })]);
+    send([new File(chunks, `${prefix}-${Date.now()}.${extOf(type)}`, { type })], true);
   };
   r.start();
   return r;
@@ -712,16 +773,64 @@ $('#delTrip').onclick = async () => {
 
 // Affichage d'un voyage
 function showTrip(trip) {
-  main.innerHTML = `<form id="note"><textarea name="text" rows="1" placeholder="Écrire une note…"></textarea><button>Ajouter</button></form>
-    <div class="grid" id="items"></div>`;
+  main.innerHTML = `<div class="tabs" id="tabs"><button data-tab="wall" class="on">Souvenirs</button><button data-tab="map">Carte</button></div>
+    <section id="wall"><form id="note"><textarea name="text" rows="1" placeholder="Écrire une note…"></textarea><button>Ajouter</button></form>
+    <div class="grid" id="items"></div></section>
+    <section id="mapTab" hidden><div id="map"></div>
+    <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.<br>Les photos, vidéos, audios et notes pris dans l’appli seront placés ici.</p></section>`;
+  $('#tabs').onclick = e => {
+    const tab = e.target.dataset.tab;
+    if (!tab) return;
+    $('#tabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+    $('#wall').hidden = tab !== 'wall';
+    $('#mapTab').hidden = tab !== 'map';
+    showMap();
+  };
   $('#note').onsubmit = e => {
     e.preventDefault();
     const text = e.target.text.value.trim();
     if (!text) return;
     e.target.reset();
-    send([new File([text], `note-${Date.now()}.txt`, { type: 'text/plain' })]);
+    send([new File([text], `note-${Date.now()}.txt`, { type: 'text/plain' })], true);
   };
   loadItems(trip);
+}
+
+// Carte : un point par lieu (médias à moins de ~100 m regroupés), avec la miniature d'une photo et le nombre de médias.
+// Toucher un point ouvre ces médias dans la visionneuse.
+let tripMedia = [], map, mapLayer;
+const PIN_ICON = { vid: 'fa-video', aud: 'fa-microphone', note: 'fa-quote-left' };
+function showMap() {
+  const box = $('#map');
+  if (!box || $('#mapTab').hidden) return;
+  if (!map || map.getContainer() !== box) {
+    map?.remove();
+    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    map = L.map(box, { zoomControl: false });
+    L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/${dark ? 'dark_all' : 'voyager'}/{z}/{x}/{y}{r}.png`, {
+      maxZoom: 19, attribution: '© OpenStreetMap, © CARTO',
+    }).addTo(map);
+    mapLayer = L.layerGroup().addTo(map);
+  }
+  mapLayer.clearLayers();
+  const places = new Map();
+  for (const m of tripMedia) if (m.lat !== undefined) {
+    const k = `${m.lat.toFixed(3)},${m.lng.toFixed(3)}`;
+    places.set(k, [...(places.get(k) || []), m]);
+  }
+  $('.map-empty').hidden = places.size > 0;
+  const pts = [];
+  for (const group of places.values()) {
+    const cover = group.find(m => m.kind === 'img'), at = [group[0].lat, group[0].lng];
+    pts.push(at);
+    const inner = cover ? `<img src="${cover.src}" alt="">` : `<i class="fa-solid ${PIN_ICON[group[0].kind]}"></i>`;
+    L.marker(at, { icon: L.divIcon({ className: 'pin', html: inner + (group.length > 1 ? `<b>${group.length}</b>` : ''), iconSize: [54, 54], iconAnchor: [27, 62] }) })
+      .on('click', () => openViewer(group, 0))
+      .addTo(mapLayer);
+  }
+  map.invalidateSize();
+  if (pts.length) map.fitBounds(pts, { padding: [60, 60], maxZoom: 15 });
+  else map.setView([46.6, 2.4], 5);
 }
 
 // Aléatoire stable tiré du nom du fichier : la disposition reste la même à chaque ouverture
@@ -939,6 +1048,8 @@ async function loadItems(trip) {
     const drift = `--d:${(5 + r('d') * 4).toFixed(1)}s;--delay:-${(r('l') * 6).toFixed(1)}s;`;
     const scatter = `--span:${r('s') < .3 ? 4 : 3};--r:${(r('r') * 10 - 5).toFixed(1)}deg;--dx:${Math.round(r('x') * 12 - 6)}px;--dy:${Math.round(r('y') * 18)}px;`;
     const isImg = /^(jpe?g|png|gif|webp|avif|heic)$/.test(ext), isVid = /^(mp4|mov|webm|m4v)$/.test(ext);
+    const geo = decodeURIComponent(b.pathname).match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+    const where = geo ? { lat: +geo[1], lng: +geo[2] } : {}; // position pour la carte
     if (isImg || isVid) {
       // Disposition « en vrac » : taille, format, inclinaison et décalage tirés au hasard (mais stables)
       el.classList.add('float');
@@ -946,14 +1057,14 @@ async function loadItems(trip) {
       el.innerHTML = isImg
         ? `<img src="${b.src}" loading="lazy" alt="">`
         : `<video src="${b.src}#t=0.1" muted playsinline preload="metadata"></video><span class="play-badge"><i class="fa-solid fa-play"></i></span>`;
-      const i = media.push({ kind: isImg ? 'img' : 'vid', src: b.src }) - 1;
+      const i = media.push({ kind: isImg ? 'img' : 'vid', src: b.src, ...where }) - 1;
       el.querySelector('img, video').onclick = () => openViewer(media, i);
     } else if (ext === 'txt') {
       // Note : même disposition en vrac que les photos, et s'ouvre aussi dans la visionneuse
       el.classList.add('float', 'note');
       el.style.cssText = drift + scatter;
       el.innerHTML = `<i class="fa-solid fa-quote-left"></i><pre></pre><time>${date}</time>`;
-      const m = { kind: 'note', text: '', date };
+      const m = { kind: 'note', text: '', date, src: b.src, ...where };
       const i = media.push(m) - 1;
       fetch(b.src).then(r => r.text()).then(t => { m.text = el.querySelector('pre').textContent = t; });
       el.querySelector('pre').onclick = () => openViewer(media, i);
@@ -964,7 +1075,7 @@ async function loadItems(trip) {
       el.innerHTML = audioHTML(b.src, date, '');
       wireAudio(el);
       // Le rond lit l'audio sur place ; toucher la durée l'ouvre dans la visionneuse
-      const i = media.push({ kind: 'aud', src: b.src, date }) - 1;
+      const i = media.push({ kind: 'aud', src: b.src, date, ...where }) - 1;
       el.querySelector('.len').onclick = () => openViewer(media, i);
     } else {
       el.classList.add('wide');
@@ -976,10 +1087,13 @@ async function loadItems(trip) {
       if (!confirm('Supprimer ce média ?')) return;
       await api(`?url=${encodeURIComponent(b.url)}`, { method: 'DELETE' });
       el.remove();
+      tripMedia = tripMedia.filter(m => m.src !== b.src); // retire aussi le point de la carte
     };
     el.append(del);
     box.append(el);
   }
+  tripMedia = media;
+  showMap();
 }
 
 // Verre interactif sur les boutons en verre (grossit, s'illumine sous le doigt, rebondit au lâcher)
