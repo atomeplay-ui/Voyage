@@ -550,11 +550,11 @@ const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
 const mid = (a, b) => ({ x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 });
 
 function applyZoom(animate) {
+  track.style.overflowX = zoom.s > 1 ? 'hidden' : ''; // bloque le passage à la photo suivante pendant le zoom
   const img = zoom.img;
   if (!img) return;
   img.style.transition = animate ? 'transform .25s ease' : '';
   img.style.transform = zoom.s > 1 ? `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})` : '';
-  track.style.overflowX = zoom.s > 1 ? 'hidden' : ''; // bloque le passage à la photo suivante pendant le zoom
 }
 function resetZoom(animate) {
   zoom.s = 1; zoom.x = zoom.y = 0;
