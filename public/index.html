@@ -2,30 +2,117 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
 <title>Mes voyages</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 900px; margin: auto; padding: 16px; background: #f5f5f5; }
-  a { color: inherit; }
-  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-  button, .btn { font: inherit; padding: 8px 12px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; }
-  .btn input { display: none; }
-  .rec { background: #e33; color: #fff; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
-  .item { background: #fff; border-radius: 8px; padding: 6px; position: relative; }
-  .item img, .item video, .item audio { width: 100%; border-radius: 6px; display: block; }
-  .item pre { white-space: pre-wrap; margin: 0; font-family: inherit; }
-  .del { position: absolute; top: 4px; right: 4px; padding: 2px 6px; }
-  textarea { width: 100%; box-sizing: border-box; min-height: 80px; font: inherit; }
-  ul { padding: 0; list-style: none; } li a { display: block; background: #fff; padding: 12px; margin: 6px 0; border-radius: 8px; text-decoration: none; }
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #1a1d21; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #0f766e; --accent-soft: #e6f4f2; --danger: #dc2626;
+    --top-h: 56px; --bar-h: 72px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1113; --card: #1a1d21; --text: #eceef1; --muted: #9aa1ab; --line: #2a2e34; --accent: #2dd4bf; --accent-soft: #123330; }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 0; background: none; }
+
+  /* Barre du haut */
+  .top { position: sticky; top: 0; z-index: 10; height: calc(var(--top-h) + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 8px 0;
+    display: flex; align-items: center; gap: 4px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .top h1 { flex: 1; margin: 0; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .icon { width: 44px; height: 44px; border-radius: 12px; font-size: 22px; display: grid; place-items: center; }
+  .icon:active { background: var(--line); }
+
+  /* Menu latéral */
+  #drawer { position: fixed; z-index: 30; inset: 0 auto 0 0; width: min(82vw, 320px); background: var(--card);
+    transform: translateX(-100%); transition: transform .25s ease; display: flex; flex-direction: column;
+    padding: calc(env(safe-area-inset-top) + 16px) 16px env(safe-area-inset-bottom); box-shadow: 4px 0 24px rgba(0,0,0,.15); }
+  body.menu-open #drawer { transform: none; }
+  #backdrop { position: fixed; z-index: 20; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .25s; }
+  body.menu-open #backdrop { opacity: 1; pointer-events: auto; }
+  #drawer h2 { margin: 0 0 12px; font-size: 22px; }
+  #new { display: flex; gap: 8px; margin-bottom: 12px; }
+  #new input { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+  #new button { padding: 0 16px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 600; }
+  #tripList { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+  #tripList a { display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 12px; text-decoration: none; color: inherit; }
+  #tripList a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .empty-list { color: var(--muted); padding: 12px; }
+
+  /* Contenu */
+  main { padding: 12px 12px calc(var(--bar-h) + env(safe-area-inset-bottom) + 16px); max-width: 900px; margin: auto; }
+  .welcome { text-align: center; color: var(--muted); margin-top: 20vh; padding: 0 24px; }
+  .welcome div { font-size: 56px; }
+  #note { display: flex; gap: 8px; align-items: flex-end; background: var(--card); border-radius: 16px; padding: 8px; margin-bottom: 12px; }
+  #note textarea { flex: 1; border: 0; background: none; resize: none; min-height: 44px; max-height: 40vh; padding: 10px; outline: none; field-sizing: content; }
+  #note button { height: 44px; padding: 0 14px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  @media (min-width: 600px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  .item { position: relative; background: var(--card); border-radius: 14px; overflow: hidden; }
+  .item.wide { grid-column: 1 / -1; padding: 12px 44px 12px 12px; }
+  .item img, .item video { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: #000; }
+  .item audio { width: 100%; }
+  .item pre { margin: 0; white-space: pre-wrap; font-family: inherit; }
+  .item time { display: block; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .del { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; font-size: 14px; }
+  .empty { text-align: center; color: var(--muted); margin-top: 15vh; }
+
+  /* Barre d'actions du bas */
+  #actions { position: fixed; z-index: 10; inset: auto 0 0 0; display: flex; justify-content: space-around;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line); }
+  #actions > * { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 12px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  #actions span { font-size: 26px; }
+  #actions > *:active { background: var(--line); }
+  #actions input { display: none; }
+  #rec.on { color: var(--danger); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .5; } }
+  #toast { position: fixed; z-index: 40; left: 50%; bottom: calc(var(--bar-h) + env(safe-area-inset-bottom) + 12px); transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; max-width: 90vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  [hidden] { display: none !important; }
+
+  /* Grand écran : menu toujours visible */
+  @media (min-width: 900px) {
+    #drawer { transform: none; box-shadow: none; border-right: 1px solid var(--line); }
+    #backdrop, #menuBtn { display: none; }
+    body { padding-left: 320px; }
+    #actions { left: 320px; }
+  }
 </style>
 </head>
 <body>
-<main id="app"></main>
+<header class="top">
+  <button class="icon" id="menuBtn" aria-label="Menu">☰</button>
+  <h1 id="title">Mes voyages</h1>
+  <button class="icon" id="delTrip" aria-label="Supprimer le voyage" hidden>🗑️</button>
+</header>
+
+<nav id="drawer">
+  <h2>🧳 Mes voyages</h2>
+  <form id="new"><input name="name" placeholder="Nouveau voyage" required><button aria-label="Créer">＋</button></form>
+  <ul id="tripList"></ul>
+</nav>
+<div id="backdrop"></div>
+
+<main id="main"></main>
+
+<footer id="actions" hidden>
+  <label><span>📷</span>Photo<input type="file" accept="image/*" capture="environment"></label>
+  <label><span>🎥</span>Vidéo<input type="file" accept="video/*" capture="environment"></label>
+  <button id="rec"><span>🎙️</span><b>Audio</b></button>
+  <label><span>📁</span>Importer<input type="file" multiple accept="image/*,video/*,audio/*,text/plain"></label>
+</footer>
+<div id="toast" hidden></div>
+
 <script type="module">
 import { uploadPresigned } from 'https://esm.sh/@vercel/blob@2.8.0/client';
 
-const app = document.getElementById('app');
+const $ = s => document.querySelector(s);
+const main = $('#main'), toast = $('#toast');
+const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+const currentTrip = () => decodeURIComponent(location.hash.slice(1));
 
 async function api(q = '', opts = {}) {
   const r = await fetch('/api/trips' + q, { ...opts, headers: { 'content-type': 'application/json' } });
@@ -33,111 +120,129 @@ async function api(q = '', opts = {}) {
   if (!r.ok) { alert(json.error || 'Erreur'); throw new Error(json.error); }
   return json;
 }
-const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 
-async function showTrips() {
+// Menu
+const setMenu = open => document.body.classList.toggle('menu-open', open);
+$('#menuBtn').onclick = () => setMenu(true);
+$('#backdrop').onclick = () => setMenu(false);
+
+async function loadTrips() {
   const trips = await api();
-  app.innerHTML = `<h1>Mes voyages</h1>
-    <form class="bar" id="new"><input name="name" placeholder="Nouveau voyage" required><button>Créer</button></form>
-    <ul>${trips.map(t => `<li><a href="#${encodeURIComponent(t)}">📁 ${esc(t)}</a></li>`).join('')}</ul>`;
-  app.querySelector('#new').onsubmit = async e => {
-    e.preventDefault();
-    const name = e.target.name.value.trim();
-    await api('', { method: 'POST', body: JSON.stringify({ name }) });
-    location.hash = encodeURIComponent(name);
-  };
+  const cur = currentTrip();
+  $('#tripList').innerHTML = trips.length
+    ? trips.map(t => `<li><a href="#${encodeURIComponent(t)}" class="${t === cur ? 'active' : ''}">📁 ${esc(t)}</a></li>`).join('')
+    : '<li class="empty-list">Aucun voyage pour l’instant.</li>';
 }
+$('#tripList').onclick = e => e.target.closest('a') && setMenu(false);
 
-async function showTrip(trip) {
-  app.innerHTML = `<a href="#">← Voyages</a> <h1>${esc(trip)}</h1>
-    <div class="bar">
-      <label class="btn">📷 Photo<input type="file" accept="image/*" capture="environment"></label>
-      <label class="btn">🎥 Vidéo<input type="file" accept="video/*" capture="environment"></label>
-      <button id="rec">🎙️ Audio</button>
-      <label class="btn">📁 Importer<input type="file" multiple accept="image/*,video/*,audio/*,text/plain"></label>
-      <button id="delTrip">🗑️ Supprimer le voyage</button>
-    </div>
-    <form id="note"><textarea name="text" placeholder="Écrire une note…"></textarea><button>📝 Enregistrer la note</button></form>
-    <p id="status"></p>
-    <div class="grid" id="items"></div>`;
+$('#new').onsubmit = async e => {
+  e.preventDefault();
+  const name = e.target.name.value.trim();
+  await api('', { method: 'POST', body: JSON.stringify({ name }) });
+  e.target.reset();
+  setMenu(false);
+  location.hash = encodeURIComponent(name);
+};
 
-  const status = app.querySelector('#status');
-  async function send(files) {
+// Envoi des médias
+async function send(files) {
+  const trip = currentTrip();
+  try {
     for (const [i, f] of [...files].entries()) {
-      status.textContent = `Envoi ${i + 1}/${files.length} : ${f.name}…`;
+      toast.hidden = false;
+      toast.textContent = `Envoi ${i + 1}/${files.length} : ${f.name}…`;
       await uploadPresigned(`trips/${trip}/${f.name}`, f, { access: 'private', handleUploadUrl: '/api/upload' });
     }
-    status.textContent = '';
-    loadItems();
+  } catch (e) {
+    alert('Échec de l’envoi : ' + e.message);
   }
-  app.querySelectorAll('input[type=file]').forEach(inp => inp.onchange = () => send(inp.files).finally(() => inp.value = ''));
+  toast.hidden = true;
+  if (currentTrip() === trip) loadItems(trip);
+}
+document.querySelectorAll('#actions input').forEach(inp => inp.onchange = () => send(inp.files).finally(() => inp.value = ''));
 
-  app.querySelector('#note').onsubmit = e => {
+// Enregistrement audio
+let rec;
+const recBtn = $('#rec');
+recBtn.onclick = async () => {
+  if (rec) return rec.stop();
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  rec = new MediaRecorder(stream);
+  const chunks = [];
+  rec.ondataavailable = e => chunks.push(e.data);
+  rec.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    const type = rec.mimeType.split(';')[0];
+    const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'weba';
+    rec = null;
+    recBtn.classList.remove('on'); recBtn.querySelector('b').textContent = 'Audio';
+    send([new File(chunks, `audio-${Date.now()}.${ext}`, { type })]);
+  };
+  rec.start();
+  recBtn.classList.add('on'); recBtn.querySelector('b').textContent = 'Arrêter';
+};
+
+$('#delTrip').onclick = async () => {
+  const trip = currentTrip();
+  if (!confirm(`Supprimer « ${trip} » et tout son contenu ?`)) return;
+  await api(`?trip=${encodeURIComponent(trip)}`, { method: 'DELETE' });
+  location.hash = '';
+};
+
+// Affichage d'un voyage
+function showTrip(trip) {
+  main.innerHTML = `<form id="note"><textarea name="text" rows="1" placeholder="Écrire une note…"></textarea><button>Ajouter</button></form>
+    <div class="grid" id="items"></div>`;
+  $('#note').onsubmit = e => {
     e.preventDefault();
     const text = e.target.text.value.trim();
     if (!text) return;
     e.target.reset();
     send([new File([text], `note-${Date.now()}.txt`, { type: 'text/plain' })]);
   };
-
-  let rec;
-  const recBtn = app.querySelector('#rec');
-  recBtn.onclick = async () => {
-    if (rec) return rec.stop();
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    rec = new MediaRecorder(stream);
-    const chunks = [];
-    rec.ondataavailable = e => chunks.push(e.data);
-    rec.onstop = () => {
-      stream.getTracks().forEach(t => t.stop());
-      const type = rec.mimeType.split(';')[0];
-      const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'weba';
-      rec = null;
-      recBtn.textContent = '🎙️ Audio'; recBtn.className = '';
-      send([new File(chunks, `audio-${Date.now()}.${ext}`, { type })]);
-    };
-    rec.start();
-    recBtn.textContent = '⏹️ Arrêter'; recBtn.className = 'rec';
-  };
-
-  app.querySelector('#delTrip').onclick = async () => {
-    if (!confirm(`Supprimer « ${trip} » et tout son contenu ?`)) return;
-    await api(`?trip=${encodeURIComponent(trip)}`, { method: 'DELETE' });
-    location.hash = '';
-  };
-
-  async function loadItems() {
-    const blobs = (await api(`?trip=${encodeURIComponent(trip)}`))
-      .sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt));
-    const box = app.querySelector('#items');
-    box.innerHTML = '';
-    for (const b of blobs) {
-      const ext = b.pathname.split('.').pop().toLowerCase();
-      const el = document.createElement('div');
-      el.className = 'item';
-      if (/^(jpe?g|png|gif|webp|avif|heic)$/.test(ext)) el.innerHTML = `<a href="${b.src}" target="_blank"><img src="${b.src}" loading="lazy"></a>`;
-      else if (/^(mp4|mov|webm|m4v)$/.test(ext)) el.innerHTML = `<video src="${b.src}" controls preload="metadata"></video>`;
-      else if (/^(weba|m4a|mp3|wav|ogg|aac|opus)$/.test(ext)) el.innerHTML = `<audio src="${b.src}" controls></audio>`;
-      else if (ext === 'txt') { el.innerHTML = '<pre></pre>'; fetch(b.src).then(r => r.text()).then(t => el.firstChild.textContent = t); }
-      else el.innerHTML = `<a href="${b.src}" target="_blank">${esc(b.pathname.split('/').pop())}</a>`;
-      const del = document.createElement('button');
-      del.className = 'del'; del.textContent = '✕';
-      del.onclick = async () => {
-        if (!confirm('Supprimer ce média ?')) return;
-        await api(`?url=${encodeURIComponent(b.url)}`, { method: 'DELETE' });
-        el.remove();
-      };
-      el.append(del);
-      box.append(el);
-    }
-  }
-  loadItems();
+  loadItems(trip);
 }
 
-const route = () => {
-  const t = decodeURIComponent(location.hash.slice(1));
-  t ? showTrip(t) : showTrips();
-};
+async function loadItems(trip) {
+  const blobs = (await api(`?trip=${encodeURIComponent(trip)}`))
+    .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+  const box = $('#items');
+  if (!box || currentTrip() !== trip) return;
+  box.innerHTML = blobs.length ? '' : '<p class="empty" style="grid-column:1/-1">Ce voyage est vide.<br>Ajoutez une photo, une vidéo, un audio ou une note.</p>';
+  for (const b of blobs) {
+    const ext = b.pathname.split('.').pop().toLowerCase();
+    const date = new Date(b.uploadedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+    const el = document.createElement('div');
+    el.className = 'item';
+    if (/^(jpe?g|png|gif|webp|avif|heic)$/.test(ext)) el.innerHTML = `<a href="${b.src}" target="_blank"><img src="${b.src}" loading="lazy" alt=""></a>`;
+    else if (/^(mp4|mov|webm|m4v)$/.test(ext)) el.innerHTML = `<video src="${b.src}#t=0.1" controls playsinline preload="metadata"></video>`;
+    else {
+      el.classList.add('wide');
+      if (/^(weba|m4a|mp3|wav|ogg|aac|opus)$/.test(ext)) el.innerHTML = `<audio src="${b.src}" controls></audio><time>${date}</time>`;
+      else if (ext === 'txt') { el.innerHTML = `<pre></pre><time>${date}</time>`; fetch(b.src).then(r => r.text()).then(t => el.firstChild.textContent = t); }
+      else el.innerHTML = `<a href="${b.src}" target="_blank">${esc(b.pathname.split('/').pop())}</a>`;
+    }
+    const del = document.createElement('button');
+    del.className = 'del'; del.textContent = '✕'; del.setAttribute('aria-label', 'Supprimer');
+    del.onclick = async () => {
+      if (!confirm('Supprimer ce média ?')) return;
+      await api(`?url=${encodeURIComponent(b.url)}`, { method: 'DELETE' });
+      el.remove();
+    };
+    el.append(del);
+    box.append(el);
+  }
+}
+
+function route() {
+  const trip = currentTrip();
+  $('#title').textContent = trip || 'Mes voyages';
+  $('#delTrip').hidden = $('#actions').hidden = !trip;
+  loadTrips();
+  if (trip) return showTrip(trip);
+  main.innerHTML = '<div class="welcome"><div>🧳</div><p>Ouvrez le menu pour choisir ou créer un voyage.</p></div>';
+  setMenu(true);
+}
 addEventListener('hashchange', route);
 route();
 </script>
