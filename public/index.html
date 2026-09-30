@@ -47,8 +47,10 @@
     border: 1px solid var(--glass-border);
     box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 1px rgba(255,255,255,.06), var(--shadow);
   }
-  #actions > *:active { background: var(--glass-press); transform: scale(.96); }
-  #actions > * { transition: transform .15s ease, background .15s; }
+  /* Verre interactif (façon iOS 26) : sous le doigt, le bouton grossit et s'illumine à l'endroit touché, puis rebondit */
+  .pressed { transform: scale(1.08); transition: transform .25s cubic-bezier(.3,1.5,.5,1);
+    background-image: radial-gradient(circle at var(--px, 50%) var(--py, 50%), rgba(255,255,255,.55), rgba(255,255,255,0) 70%) !important; }
+  @media (prefers-reduced-motion: reduce) { .pressed { transform: none; } }
 
   /* Barre du haut flottante */
   .top { position: sticky; z-index: 10; top: calc(env(safe-area-inset-top) + 8px); margin: calc(env(safe-area-inset-top) + 8px) 10px 0;
@@ -178,6 +180,10 @@
     display: flex; gap: 4px; padding: 6px; border-radius: 999px; }
   #actions > * { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 88px; padding: 7px 18px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text); }
   #actions i { font-size: 20px; height: 24px; display: grid; place-items: center; color: var(--accent); }
+  /* Barre réduite quand on fait défiler vers le bas (comme la barre d'onglets d'iOS 26) : icônes seules, capsule plus petite */
+  #actions, #actions > * { transition: padding .3s cubic-bezier(.3,1.3,.5,1), min-width .3s cubic-bezier(.3,1.3,.5,1), font-size .2s, gap .2s; }
+  body.bar-min #actions { padding: 4px; }
+  body.bar-min #actions > * { min-width: 46px; padding: 6px 10px; font-size: 0; gap: 0; }
   #actions b { font-weight: inherit; }
   #rec.on { background: var(--danger); color: #fff; animation: pulse 1.2s infinite; }
   #rec.on i { color: #fff; }
@@ -968,8 +974,38 @@ async function loadItems(trip) {
   }
 }
 
+// Verre interactif sur les boutons en verre (grossit, s'illumine sous le doigt, rebondit au lâcher)
+const GLASS_BTNS = '.top .icon, #actions > button, button.cam-glass:not(.viewer-nav), #new button, #note button, .item.audio .ring';
+addEventListener('pointerdown', e => {
+  const b = e.target.closest(GLASS_BTNS);
+  if (!b) return;
+  const r = b.getBoundingClientRect();
+  b.style.setProperty('--px', `${e.clientX - r.left}px`);
+  b.style.setProperty('--py', `${e.clientY - r.top}px`);
+  b.classList.add('pressed');
+  const up = () => {
+    removeEventListener('pointerup', up);
+    removeEventListener('pointercancel', up);
+    b.classList.remove('pressed');
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches)
+      b.animate([{ transform: 'scale(1.08)' }, { transform: 'scale(.96)', offset: .5 }, { transform: 'scale(1)' }], { duration: 380, easing: 'cubic-bezier(.3,.7,.4,1)' });
+  };
+  addEventListener('pointerup', up);
+  addEventListener('pointercancel', up);
+});
+
+// Barre du bas : se réduit quand on descend, revient quand on remonte (ou près du haut)
+let lastScrollY = 0;
+addEventListener('scroll', () => {
+  const y = scrollY;
+  if (Math.abs(y - lastScrollY) < 8) return;
+  document.body.classList.toggle('bar-min', y > lastScrollY && y > 80);
+  lastScrollY = y;
+}, { passive: true });
+
 function route() {
   const trip = currentTrip();
+  document.body.classList.remove('bar-min');
   $('#title').textContent = trip || 'Mes voyages';
   $('#delTrip').hidden = $('#actions').hidden = !trip;
   loadTrips();
