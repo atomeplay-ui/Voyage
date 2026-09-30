@@ -7,8 +7,7 @@
 <meta name="theme-color" content="#07080c" media="(prefers-color-scheme: dark)">
 <title>Mes voyages</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
 <style>
   /* Style « Liquid Glass » : panneaux de verre translucides flottant sur un fond coloré */
   :root {
@@ -104,19 +103,20 @@
   .tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
   /* Carte (contenu : surface opaque, pas de verre) */
   #map { height: calc(100dvh - 230px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); min-height: 320px; border-radius: 24px; overflow: hidden;
-    isolation: isolate; /* garde les calques Leaflet sous les barres, le menu et la visionneuse */
-    border: 1px solid var(--surface-line); box-shadow: var(--card-shadow); background: var(--surface); }
+    isolation: isolate; border: 1px solid var(--surface-line); box-shadow: var(--card-shadow); background: var(--surface); }
   .map-empty { text-align: center; color: var(--muted); font-size: 14px; margin: 12px 20px 0; }
   /* Point sur la carte : miniature façon Polaroid avec une pointe, et le nombre de médias à cet endroit */
-  .pin { border-radius: 14px; background: var(--surface); border: 3px solid var(--surface); box-shadow: 0 6px 16px rgba(0,0,0,.35); display: grid; place-items: center; }
+  .pin { width: 54px; height: 54px; cursor: pointer; border-radius: 14px; background: var(--surface); border: 3px solid var(--surface);
+    box-shadow: 0 6px 16px rgba(0,0,0,.35); display: grid; place-items: center; }
   .pin::after { content: ''; position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); border: 8px solid transparent; border-top-color: var(--surface); border-bottom: 0; }
-  #map .pin img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; } /* #map : passe devant la règle img de Leaflet */
-  /* Mode sombre : fond OpenStreetMap inversé et adouci */
-  @media (prefers-color-scheme: dark) { #map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); } }
+  .pin img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
   .pin i { color: var(--accent); font-size: 20px; }
   .pin b { position: absolute; top: -9px; right: -9px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center;
     background: var(--accent); color: #fff; font-size: 12px; border: 2px solid var(--surface); }
-  .leaflet-container { font: inherit; }
+  /* Mention des sources : petit ⓘ en verre, qui se déplie au toucher */
+  #map .maplibregl-ctrl-attrib { margin: 0 10px 10px 0; border-radius: 999px; font-size: 11px; color: var(--text);
+    background: var(--glass); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: inset 0 1px 0 var(--glass-hi); }
+  #map .maplibregl-ctrl-attrib a { color: inherit; }
 
   /* Mur de médias « en vrac » : photos flottantes, audios ronds, notes en cartes */
   .grid { display: grid; grid-template-columns: repeat(6, 1fr); grid-auto-flow: dense; gap: 16px 12px; padding: 4px 4px 24px; }
@@ -800,43 +800,62 @@ function showTrip(trip) {
 
 // Carte : un point par lieu (médias à moins de ~100 m regroupés), avec la miniature d'une photo et le nombre de médias.
 // Toucher un point ouvre ces médias dans la visionneuse.
-let tripMedia = [], map, mapLayer;
+// Carte vectorielle MapLibre + styles OpenFreeMap (gratuits, sans clé). La bibliothèque (~1 Mo) n'est chargée qu'à la première ouverture.
+let tripMedia = [], map, pins = [], mapLib;
 const PIN_ICON = { vid: 'fa-video', aud: 'fa-microphone', note: 'fa-quote-left' };
-function showMap() {
+const loadMapLib = () => mapLib ??= new Promise((res, rej) => {
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js';
+  s.onload = () => res(window.maplibregl);
+  s.onerror = () => { mapLib = null; rej(new Error('Carte indisponible')); };
+  document.head.append(s);
+});
+
+async function showMap() {
   const box = $('#map');
   if (!box || $('#mapTab').hidden) return;
+  const ml = await loadMapLib();
+  if (!box.isConnected || $('#mapTab').hidden) return;
   if (!map || map.getContainer() !== box) {
     map?.remove();
-    map = L.map(box, { zoomControl: false });
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
-    mapLayer = L.layerGroup().addTo(map);
+    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    map = new ml.Map({
+      container: box, style: `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'liberty'}`,
+      center: [2.4, 46.6], zoom: 4.5,
+      attributionControl: { compact: true }, // mention des sources repliée dans un petit ⓘ
+    });
     map.on('zoomend', drawPins);
+    // Le ⓘ s'affiche déplié au chargement : on le replie
+    map.once('load', () => box.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show'));
   }
-  const pts = tripMedia.filter(m => m.lat !== undefined).map(m => [m.lat, m.lng]);
-  $('.map-empty').hidden = pts.length > 0;
-  map.invalidateSize();
-  if (pts.length) map.fitBounds(pts, { padding: [60, 60], maxZoom: 15 });
-  else map.setView([46.6, 2.4], 5);
+  const located = tripMedia.filter(m => m.lat !== undefined);
+  $('.map-empty').hidden = located.length > 0;
+  map.resize();
+  if (located.length) {
+    const bounds = new ml.LngLatBounds();
+    located.forEach(m => bounds.extend([m.lng, m.lat]));
+    map.fitBounds(bounds, { padding: 70, maxZoom: 15, duration: 0 });
+  }
   drawPins();
 }
 
 // Regroupe les médias dont les points se chevaucheraient à l'écran (recalculé à chaque zoom, comme Plans)
 function drawPins() {
-  mapLayer.clearLayers();
+  pins.forEach(p => p.remove());
+  pins = [];
   const groups = [];
   for (const m of tripMedia) if (m.lat !== undefined) {
-    const p = map.latLngToLayerPoint([m.lat, m.lng]);
-    const g = groups.find(g => g.p.distanceTo(p) < 56);
-    if (g) g.items.push(m); else groups.push({ p, at: [m.lat, m.lng], items: [m] });
+    const p = map.project([m.lng, m.lat]);
+    const g = groups.find(g => Math.hypot(g.p.x - p.x, g.p.y - p.y) < 56);
+    if (g) g.items.push(m); else groups.push({ p, items: [m] });
   }
-  for (const { at, items } of groups) {
+  for (const { items } of groups) {
     const cover = items.find(m => m.kind === 'img');
-    const inner = cover ? `<img src="${cover.src}" alt="">` : `<i class="fa-solid ${PIN_ICON[items[0].kind]}"></i>`;
-    L.marker(at, { icon: L.divIcon({ className: 'pin', html: inner + (items.length > 1 ? `<b>${items.length}</b>` : ''), iconSize: [54, 54], iconAnchor: [27, 62] }) })
-      .on('click', () => openViewer(items, 0))
-      .addTo(mapLayer);
+    const el = document.createElement('div');
+    el.className = 'pin';
+    el.innerHTML = (cover ? `<img src="${cover.src}" alt="">` : `<i class="fa-solid ${PIN_ICON[items[0].kind]}"></i>`) + (items.length > 1 ? `<b>${items.length}</b>` : '');
+    el.onclick = () => openViewer(items, 0);
+    pins.push(new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, -10] }).setLngLat([items[0].lng, items[0].lat]).addTo(map));
   }
 }
 
