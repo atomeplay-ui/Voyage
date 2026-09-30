@@ -122,7 +122,8 @@
     border: 1px solid rgba(255,255,255,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
   .cam-top { position: absolute; z-index: 1; inset: 0 0 auto 0; padding: calc(env(safe-area-inset-top) + 10px) 14px 0; display: flex; align-items: center; justify-content: space-between; }
   .cam-top button, .cam-top span.spacer { width: 44px; height: 44px; border-radius: 50%; color: #fff; font-size: 20px; }
-  .cam-top span.spacer { background: none; border: 0; box-shadow: none; }
+  #camRec.on { background: var(--danger); border-color: transparent; animation: pulse 1.2s infinite; }
+  #cam.rec #camRec { visibility: hidden; }
   #camTimer { font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; padding: 6px 14px; border-radius: 999px; }
   #cam[data-mode=photo] #camTimer { visibility: hidden; }
   #cam.rec #camTimer { background: var(--danger); border-color: transparent; }
@@ -184,7 +185,7 @@
   <div class="cam-top">
     <button id="camClose" class="cam-glass" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
     <span id="camTimer" class="cam-glass">00:00:00</span>
-    <span class="spacer"></span>
+    <button id="camRec" class="cam-glass" aria-label="Enregistrer un audio"><i class="fa-solid fa-microphone"></i></button>
   </div>
   <div class="cam-view"><video id="camView" autoplay playsinline muted></video></div>
   <div class="cam-bottom">
@@ -366,10 +367,18 @@ cam.addEventListener('touchend', e => {
 });
 addEventListener('keydown', e => e.key === 'Escape' && !cam.hidden && closeCam());
 
-// Enregistrement audio
+// Enregistrement audio (bouton de la barre du bas et bouton de la caméra)
 let rec;
-const recBtn = $('#rec');
-recBtn.onclick = async () => {
+const recBtns = document.querySelectorAll('#rec, #camRec');
+function setRecUI(on) {
+  recBtns.forEach(b => {
+    b.classList.toggle('on', on);
+    b.querySelector('i').className = `fa-solid ${on ? 'fa-stop' : 'fa-microphone'}`;
+    const label = b.querySelector('b');
+    if (label) label.textContent = on ? 'Arrêter' : 'Audio';
+  });
+}
+recBtns.forEach(b => b.onclick = async () => {
   if (rec) return rec.stop();
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   rec = new MediaRecorder(stream);
@@ -380,12 +389,12 @@ recBtn.onclick = async () => {
     const type = rec.mimeType.split(';')[0];
     const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'weba';
     rec = null;
-    recBtn.classList.remove('on'); recBtn.querySelector('b').textContent = 'Audio'; recBtn.querySelector('i').className = 'fa-solid fa-microphone';
+    setRecUI(false);
     send([new File(chunks, `audio-${Date.now()}.${ext}`, { type })]);
   };
   rec.start();
-  recBtn.classList.add('on'); recBtn.querySelector('b').textContent = 'Arrêter'; recBtn.querySelector('i').className = 'fa-solid fa-stop';
-};
+  setRecUI(true);
+});
 
 $('#delTrip').onclick = async () => {
   const trip = currentTrip();
