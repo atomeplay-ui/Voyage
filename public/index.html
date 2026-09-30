@@ -68,29 +68,42 @@
   #actions i { font-size: 22px; height: 28px; display: grid; place-items: center; }
   #actions b { font-weight: inherit; }
   #actions > *:active { background: var(--line); }
-  #actions input { display: none; }
   #rec.on { color: var(--danger); animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: .5; } }
   #toast { position: fixed; z-index: 60; left: 50%; bottom: calc(var(--bar-h) + env(safe-area-inset-bottom) + 12px); transform: translateX(-50%);
     background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; max-width: 90vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   [hidden] { display: none !important; }
 
-  /* Caméra intégrée */
-  #cam { position: fixed; z-index: 50; inset: 0; background: #000; }
-  #camView { width: 100%; height: 100%; object-fit: cover; }
+  /* Caméra intégrée, façon appareil photo iOS */
+  #cam { position: fixed; z-index: 50; inset: 0; background: #000; color: #fff; display: flex; flex-direction: column;
+    touch-action: none; user-select: none; -webkit-user-select: none; }
+  .cam-top { height: calc(env(safe-area-inset-top) + 52px); padding: env(safe-area-inset-top) 8px 0; display: flex; align-items: center; justify-content: space-between; }
+  .cam-top button, .cam-top span.spacer { width: 44px; height: 44px; color: #fff; font-size: 22px; }
+  #camTimer { font-variant-numeric: tabular-nums; font-size: 17px; padding: 2px 8px; border-radius: 6px; }
+  #cam[data-mode=photo] #camTimer { visibility: hidden; }
+  #cam.rec #camTimer { background: #ff3b30; }
+  .cam-view { flex: 1; position: relative; overflow: hidden; }
+  #camView { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .1s; }
   #cam.front #camView { transform: scaleX(-1); }
-  #cam.flash #camView { opacity: .3; }
-  .cam-top { position: absolute; inset: 0 0 auto 0; display: flex; justify-content: space-between; align-items: center;
-    padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; color: #fff; }
-  .cam-top .icon { background: rgba(0,0,0,.4); border-radius: 50%; font-size: 20px; }
-  #camTimer { font-variant-numeric: tabular-nums; font-weight: 600; background: var(--danger); padding: 4px 10px; border-radius: 999px; }
-  #camTimer:empty { display: none; }
-  .cam-bottom { position: absolute; inset: auto 0 0 0; display: flex; justify-content: center; padding: 24px 0 calc(env(safe-area-inset-bottom) + 32px); }
-  #shutter { width: 76px; height: 76px; border-radius: 50%; border: 5px solid #fff; background: #fff; background-clip: content-box; padding: 4px; transition: all .2s; }
-  #shutter:active { transform: scale(.92); }
-  #cam[data-mode=video] #shutter { background-color: var(--danger); }
-  #cam.rec #shutter { padding: 18px; animation: pulse 1s infinite; }
-  body.cam-open #toast { bottom: auto; top: calc(env(safe-area-inset-top) + 72px); }
+  #cam.flash #camView { opacity: 0; }
+  .cam-bottom { padding: 6px 0 calc(env(safe-area-inset-bottom) + 24px); }
+  .modes { display: flex; gap: 28px; height: 40px; align-items: center; transition: transform .3s ease; }
+  .modes button { color: #fff; font-size: 13px; font-weight: 600; letter-spacing: .1em; padding: 8px 0; }
+  .modes button.on { color: #ffd60a; }
+  #cam.rec .modes { visibility: hidden; }
+  .cam-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 36px 0; }
+  #camImport { width: 48px; height: 48px; border-radius: 10px; border: 2px solid rgba(255,255,255,.8); background: #222 center / cover;
+    display: grid; place-items: center; font-size: 20px; cursor: pointer; }
+  #camImport.thumb i { display: none; }
+  #camImport input { display: none; }
+  #camFlip { width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; font-size: 20px; }
+  #cam.rec #camImport, #cam.rec #camFlip { visibility: hidden; }
+  #shutter { width: 78px; height: 78px; border-radius: 50%; border: 4px solid #fff; padding: 4px; display: grid; place-items: center; }
+  #shutter::after { content: ''; width: 100%; height: 100%; border-radius: 50%; background: #fff; transition: all .25s ease; }
+  #shutter:active::after { transform: scale(.9); }
+  #cam[data-mode=video] #shutter::after { background: #ff3b30; }
+  #cam.rec #shutter::after { width: 42%; height: 42%; border-radius: 6px; }
+  body.cam-open #toast { bottom: auto; top: calc(env(safe-area-inset-top) + 60px); }
 
   /* Grand écran : menu toujours visible */
   @media (min-width: 900px) {
@@ -118,21 +131,26 @@
 <main id="main"></main>
 
 <footer id="actions" hidden>
-  <button id="photoBtn"><i class="fa-solid fa-camera"></i>Photo</button>
-  <button id="videoBtn"><i class="fa-solid fa-video"></i>Vidéo</button>
+  <button id="camBtn"><i class="fa-solid fa-camera"></i>Caméra</button>
   <button id="rec"><i class="fa-solid fa-microphone"></i><b>Audio</b></button>
-  <label><i class="fa-solid fa-file-import"></i>Importer<input type="file" multiple accept="image/*,video/*,audio/*,text/plain"></label>
 </footer>
 <div id="toast" hidden></div>
 
 <div id="cam" hidden>
-  <video id="camView" autoplay playsinline muted></video>
   <div class="cam-top">
-    <button class="icon" id="camClose" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
-    <span id="camTimer"></span>
-    <button class="icon" id="camFlip" aria-label="Changer de caméra"><i class="fa-solid fa-camera-rotate"></i></button>
+    <button id="camClose" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+    <span id="camTimer">00:00:00</span>
+    <span class="spacer"></span>
   </div>
-  <div class="cam-bottom"><button id="shutter" aria-label="Déclencher"></button></div>
+  <div class="cam-view"><video id="camView" autoplay playsinline muted></video></div>
+  <div class="cam-bottom">
+    <div class="modes" id="modes"><button data-mode="video">VIDÉO</button><button data-mode="photo">PHOTO</button></div>
+    <div class="cam-row">
+      <label id="camImport" aria-label="Importer depuis la galerie"><i class="fa-solid fa-images"></i><input type="file" multiple accept="image/*,video/*,audio/*,text/plain"></label>
+      <button id="shutter" aria-label="Déclencher"></button>
+      <button id="camFlip" aria-label="Changer de caméra"><i class="fa-solid fa-camera-rotate"></i></button>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -195,16 +213,18 @@ async function send(files) {
   toast.hidden = true;
   if (currentTrip() === trip) loadItems(trip);
 }
-document.querySelectorAll('#actions input').forEach(inp => inp.onchange = () => send(inp.files).finally(() => inp.value = ''));
+$('#camImport input').onchange = e => send(e.target.files).finally(() => e.target.value = '');
 
-// Caméra intégrée (photo / vidéo)
-const cam = $('#cam'), camView = $('#camView'), camTimer = $('#camTimer');
-let camStream, camRec, camTick, facing = 'environment';
+// Caméra intégrée, façon appareil photo iOS : glisser pour passer de PHOTO à VIDÉO
+const cam = $('#cam'), camView = $('#camView'), camTimer = $('#camTimer'), modes = $('#modes');
+let camStream, camRec, camTick, camReq = 0, facing = 'environment';
 
 async function startCam() {
+  const req = ++camReq; // ignore les demandes dépassées (changement de mode rapide)
   camStream?.getTracks().forEach(t => t.stop());
+  let stream;
   try {
-    camStream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: cam.dataset.mode === 'video',
     });
@@ -212,19 +232,30 @@ async function startCam() {
     alert('Impossible d’accéder à la caméra : ' + e.message);
     return closeCam();
   }
-  camView.srcObject = camStream;
+  if (req !== camReq || cam.hidden) return stream.getTracks().forEach(t => t.stop());
+  camView.srcObject = camStream = stream;
   cam.classList.toggle('front', facing === 'user');
 }
 
-function openCam(mode) {
+function setMode(mode) {
+  if (camRec || mode === cam.dataset.mode) return;
   cam.dataset.mode = mode;
+  modes.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  const on = modes.querySelector('.on');
+  modes.style.transform = `translateX(${modes.offsetWidth / 2 - on.offsetLeft - on.offsetWidth / 2}px)`;
+  startCam();
+}
+
+function openCam() {
   cam.hidden = false;
   document.body.classList.add('cam-open');
-  startCam();
+  cam.dataset.mode = '';
+  setMode('photo');
 }
 
 function closeCam() {
   camRec?.stop(); // une vidéo en cours est enregistrée, pas perdue
+  camReq++;
   camStream?.getTracks().forEach(t => t.stop());
   camStream = null;
   camView.srcObject = null;
@@ -239,12 +270,20 @@ function takePhoto() {
   if (!c.width) return;
   c.getContext('2d').drawImage(camView, 0, 0);
   cam.classList.add('flash');
-  setTimeout(() => cam.classList.remove('flash'), 150);
-  c.toBlob(b => send([new File([b], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' })]), 'image/jpeg', 0.9);
+  setTimeout(() => cam.classList.remove('flash'), 120);
+  c.toBlob(b => {
+    // Miniature de la dernière photo, comme sur iOS
+    $('#camImport').style.backgroundImage = `url(${URL.createObjectURL(b)})`;
+    $('#camImport').classList.add('thumb');
+    send([new File([b], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' })]);
+  }, 'image/jpeg', 0.9);
 }
+
+const hms = s => [s / 3600, s / 60 % 60, s % 60].map(n => String(Math.floor(n)).padStart(2, '0')).join(':');
 
 function toggleVideo() {
   if (camRec) return camRec.stop();
+  if (!camStream) return;
   const chunks = [], start = Date.now();
   camRec = new MediaRecorder(camStream);
   camRec.ondataavailable = e => chunks.push(e.data);
@@ -252,22 +291,29 @@ function toggleVideo() {
     const type = (camRec.mimeType || 'video/webm').split(';')[0];
     camRec = null;
     clearInterval(camTick);
-    camTimer.textContent = '';
+    camTimer.textContent = hms(0);
     cam.classList.remove('rec');
     send([new File(chunks, `video-${Date.now()}.${type.includes('mp4') ? 'mp4' : 'webm'}`, { type })]);
   };
   camRec.start();
   cam.classList.add('rec');
-  const tick = () => { const s = Math.floor((Date.now() - start) / 1000); camTimer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-  tick();
-  camTick = setInterval(tick, 500);
+  camTick = setInterval(() => { camTimer.textContent = hms((Date.now() - start) / 1000); }, 500);
 }
 
-$('#photoBtn').onclick = () => openCam('photo');
-$('#videoBtn').onclick = () => openCam('video');
+$('#camBtn').onclick = openCam;
 $('#camClose').onclick = closeCam;
 $('#camFlip').onclick = () => { if (camRec) return; facing = facing === 'user' ? 'environment' : 'user'; startCam(); };
-$('#shutter').onclick = () => cam.dataset.mode === 'photo' ? takePhoto() : toggleVideo();
+$('#shutter').onclick = () => { cam.dataset.mode === 'photo' ? takePhoto() : toggleVideo(); };
+modes.onclick = e => { if (e.target.dataset.mode) setMode(e.target.dataset.mode); };
+// Glisser à droite -> VIDÉO, à gauche -> PHOTO
+let touchX = null;
+cam.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+cam.addEventListener('touchend', e => {
+  if (touchX === null) return;
+  const dx = e.changedTouches[0].clientX - touchX;
+  touchX = null;
+  if (Math.abs(dx) > 50) setMode(dx > 0 ? 'video' : 'photo');
+});
 addEventListener('keydown', e => e.key === 'Escape' && !cam.hidden && closeCam());
 
 // Enregistrement audio
