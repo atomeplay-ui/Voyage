@@ -163,7 +163,13 @@ async function loadTrips() {
     ? trips.map(t => `<li><a href="#${encodeURIComponent(t)}" class="${t === cur ? 'active' : ''}"><i class="fa-solid ${t === cur ? 'fa-folder-open' : 'fa-folder'}"></i> ${esc(t)}</a></li>`).join('')
     : '<li class="empty-list">Aucun voyage pour l’instant.</li>';
 }
-$('#tripList').onclick = e => e.target.closest('a') && setMenu(false);
+$('#tripList').onclick = e => {
+  const a = e.target.closest('a');
+  if (!a) return;
+  e.preventDefault();
+  setMenu(false);
+  if (location.hash === a.hash) route(); else location.hash = a.hash;
+};
 
 $('#new').onsubmit = async e => {
   e.preventDefault();
