@@ -110,7 +110,9 @@
   /* Point sur la carte : miniature façon Polaroid avec une pointe, et le nombre de médias à cet endroit */
   .pin { border-radius: 14px; background: var(--surface); border: 3px solid var(--surface); box-shadow: 0 6px 16px rgba(0,0,0,.35); display: grid; place-items: center; }
   .pin::after { content: ''; position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); border: 8px solid transparent; border-top-color: var(--surface); border-bottom: 0; }
-  .pin img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+  #map .pin img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; } /* #map : passe devant la règle img de Leaflet */
+  /* Mode sombre : fond OpenStreetMap inversé et adouci */
+  @media (prefers-color-scheme: dark) { #map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); } }
   .pin i { color: var(--accent); font-size: 20px; }
   .pin b { position: absolute; top: -9px; right: -9px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center;
     background: var(--accent); color: #fff; font-size: 12px; border: 2px solid var(--surface); }
@@ -805,10 +807,9 @@ function showMap() {
   if (!box || $('#mapTab').hidden) return;
   if (!map || map.getContainer() !== box) {
     map?.remove();
-    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
     map = L.map(box, { zoomControl: false });
-    L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/${dark ? 'dark_all' : 'voyager'}/{z}/{x}/{y}{r}.png`, {
-      maxZoom: 19, attribution: '© OpenStreetMap, © CARTO',
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     mapLayer = L.layerGroup().addTo(map);
     map.on('zoomend', drawPins);
