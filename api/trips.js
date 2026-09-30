@@ -14,20 +14,30 @@ async function listAll(opts) {
   return { blobs, folders };
 }
 
+// Store privé : ajoute à chaque média un lien de lecture signé, valable 1 h.
+async function withSrc(blobs) {
+  const token = await issueSignedToken({ pathname: '*', operations: ['get'] });
+  for (const b of blobs) b.src = (await presignUrl(token, { operation: 'get', pathname: b.pathname, access: 'private' })).presignedUrl;
+  return blobs;
+}
+
 export default async function handler(req, res) {
-  const { trip, url } = req.query;
+  const { trip, url, all } = req.query;
 
   if (req.method === 'GET') {
+    // Carte de l'accueil : tous les médias localisés (« …@lat,lng… » dans le nom), avec leur voyage
+    if (all) {
+      const blobs = (await listAll({ prefix: 'trips/' })).blobs.filter(b => b.pathname.includes('@'));
+      for (const b of blobs) b.trip = b.pathname.split('/')[1];
+      return res.json(await withSrc(blobs));
+    }
     if (!trip) {
       const { folders } = await listAll({ prefix: 'trips/', mode: 'folded' });
       return res.json(folders.map(f => f.slice('trips/'.length, -1)));
     }
     // Ignore le dossier lui-même (et les anciens fichiers .keep des premiers voyages)
     const blobs = (await listAll({ prefix: `trips/${trip}/` })).blobs.filter(b => !/\/(\.keep)?$/.test(b.pathname));
-    // Store privé : liens de lecture signés, valables 1 h.
-    const token = await issueSignedToken({ pathname: '*', operations: ['get'] });
-    for (const b of blobs) b.src = (await presignUrl(token, { operation: 'get', pathname: b.pathname, access: 'private' })).presignedUrl;
-    return res.json(blobs);
+    return res.json(await withSrc(blobs));
   }
 
   if (req.method === 'POST') {

@@ -51,7 +51,7 @@
     box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 -1px 1px rgba(255,255,255,.06), var(--shadow);
   }
   /* Contenu (photos, notes, audios, messages) : surfaces opaques, pas de verre */
-  .item:not(.audio), .ring, .welcome, .empty { background: var(--surface); border: 1px solid var(--surface-line); box-shadow: var(--card-shadow); }
+  .item:not(.audio), .ring, .empty { background: var(--surface); border: 1px solid var(--surface-line); box-shadow: var(--card-shadow); }
   /* Verre interactif (façon iOS 26) : sous le doigt, le bouton grossit et s'illumine à l'endroit touché, puis rebondit */
   .pressed { transform: scale(1.08); transition: transform .25s cubic-bezier(.3,1.5,.5,1);
     background-image: radial-gradient(circle at var(--px, 50%) var(--py, 50%), rgba(255,255,255,.55), rgba(255,255,255,0) 70%) !important; }
@@ -90,8 +90,7 @@
 
   /* Contenu */
   main { padding: 14px 10px calc(var(--bar-h) + env(safe-area-inset-bottom) + 32px); max-width: 900px; margin: auto; }
-  .welcome, .empty { text-align: center; color: var(--muted); margin: 18vh auto 0; padding: 28px 24px; border-radius: 28px; max-width: 320px; }
-  .welcome i { font-size: 48px; color: var(--accent); }
+  .empty { text-align: center; color: var(--muted); margin: 18vh auto 0; padding: 28px 24px; border-radius: 28px; max-width: 320px; }
   #note { display: flex; gap: 8px; align-items: flex-end; border-radius: 26px; padding: 6px; margin-bottom: 12px; }
   #note textarea { flex: 1; border: 0; background: none; resize: none; min-height: 44px; max-height: 40vh; padding: 11px 12px; outline: none; field-sizing: content; }
   #note textarea::placeholder { color: var(--muted); }
@@ -105,6 +104,11 @@
   #map { height: calc(100dvh - 230px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); min-height: 320px; border-radius: 24px; overflow: hidden;
     isolation: isolate; border: 1px solid var(--surface-line); box-shadow: var(--card-shadow); background: var(--surface); }
   .map-empty { text-align: center; color: var(--muted); font-size: 14px; margin: 12px 20px 0; }
+  /* Accueil : carte de tous les voyages, plus haute (pas d'onglets ni de champ de note) */
+  .home-title { margin: 4px 6px 12px; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .home-map #map { height: calc(100dvh - 190px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .sheet-head #sheetOpen { margin-left: auto; margin-right: 8px; padding: 6px 12px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; }
+  .sheet-head b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Point sur la carte : miniatures façon Polaroid empilées en éventail, avec une pointe et le nombre de médias */
   .pin { width: 54px; height: 54px; cursor: pointer; }
   .pin::after { content: ''; position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); border: 8px solid transparent; border-top-color: var(--surface); border-bottom: 0; }
@@ -793,12 +797,41 @@ $('#delTrip').onclick = async () => {
 };
 
 // Affichage d'un voyage
+const SHEET_HTML = `<div class="map-sheet" id="mapSheet" hidden><div class="sheet-head"><b id="sheetTitle"></b>
+  <button id="sheetOpen" hidden>Ouvrir <i class="fa-solid fa-chevron-right"></i></button>
+  <button id="sheetClose" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button></div><div class="sheet-strip" id="sheetStrip"></div></div>`;
+
+// Type et position d'un média, lus dans son nom de fichier (position : « …@lat,lng… »)
+const kindOf = path => {
+  const ext = path.split('.').pop().toLowerCase();
+  return /^(jpe?g|png|gif|webp|avif|heic)$/.test(ext) ? 'img' : /^(mp4|mov|webm|m4v)$/.test(ext) ? 'vid'
+    : /^(weba|m4a|mp3|wav|ogg|aac|opus)$/.test(ext) ? 'aud' : ext === 'txt' ? 'note' : null;
+};
+const geoOf = path => {
+  const g = decodeURIComponent(path).match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  return g ? { lat: +g[1], lng: +g[2] } : {};
+};
+const fmtDate = d => new Date(d).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+
+// Accueil : la carte de tous les voyages
+async function showHome() {
+  main.innerHTML = `<section id="mapTab" class="home-map"><h2 class="home-title">Tous mes voyages</h2><div id="map"></div>${SHEET_HTML}
+    <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.<br>Ouvrez le menu <i class="fa-solid fa-bars"></i> pour créer un voyage.</p></section>`;
+  const blobs = await api('?all=1');
+  if (currentTrip()) return;
+  tripMedia = blobs.map(b => {
+    const m = { kind: kindOf(b.pathname), src: b.src, date: fmtDate(b.uploadedAt), trip: b.trip, ...geoOf(b.pathname) };
+    if (m.kind === 'note') fetch(b.src).then(r => r.text()).then(t => { m.text = t; });
+    return m;
+  }).filter(m => m.kind);
+  showMap();
+}
+
 function showTrip(trip) {
   main.innerHTML = `<div class="tabs" id="tabs"><button data-tab="wall" class="on">Souvenirs</button><button data-tab="map">Carte</button></div>
     <section id="wall"><form id="note"><textarea name="text" rows="1" placeholder="Écrire une note…"></textarea><button>Ajouter</button></form>
     <div class="grid" id="items"></div></section>
-    <section id="mapTab" hidden><div id="map"></div>
-    <div class="map-sheet" id="mapSheet" hidden><div class="sheet-head"><b id="sheetTitle"></b><button id="sheetClose" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button></div><div class="sheet-strip" id="sheetStrip"></div></div>
+    <section id="mapTab" hidden><div id="map"></div>${SHEET_HTML}
     <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.<br>Les photos, vidéos, audios et notes pris dans l’appli seront placés ici.</p></section>`;
   $('#tabs').onclick = e => {
     const tab = e.target.dataset.tab;
@@ -904,7 +937,11 @@ const thumbHTML = m => m.kind === 'img' ? `<img src="${m.src}" alt="">`
 
 // Aperçu du lieu : seulement les médias de ce point ; toucher l'un d'eux l'ouvre dans la visionneuse
 function openSheet(items) {
-  $('#sheetTitle').textContent = items.length > 1 ? `${items.length} souvenirs ici` : '1 souvenir ici';
+  // Sur l'accueil, on indique le voyage (et un bouton pour l'ouvrir s'il n'y en a qu'un)
+  const trips = [...new Set(items.map(m => m.trip).filter(Boolean))];
+  $('#sheetTitle').textContent = (items.length > 1 ? `${items.length} souvenirs` : '1 souvenir') + (trips.length ? ` · ${trips.join(', ')}` : ' ici');
+  $('#sheetOpen').hidden = trips.length !== 1;
+  $('#sheetOpen').onclick = () => { location.hash = encodeURIComponent(trips[0]); };
   $('#sheetStrip').innerHTML = items.map((m, i) =>
     `<button class="sheet-item ${m.kind}" data-i="${i}">${m.kind === 'vid' ? `<video src="${m.src}#t=0.1" muted playsinline preload="metadata"></video><i class="fa-solid fa-play badge"></i>` : thumbHTML(m)}</button>`).join('');
   $('#sheetStrip').onclick = e => { const b = e.target.closest('[data-i]'); if (b) openViewer(items, +b.dataset.i); };
@@ -1121,16 +1158,13 @@ async function loadItems(trip) {
   box.innerHTML = blobs.length ? '' : '<p class="empty">Ce voyage est vide.<br>Ajoutez une photo, une vidéo, un audio ou une note.</p>';
   const media = []; // photos et vidéos, dans l'ordre d'affichage, pour la visionneuse
   for (const b of blobs) {
-    const ext = b.pathname.split('.').pop().toLowerCase();
-    const date = new Date(b.uploadedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+    const kind = kindOf(b.pathname), date = fmtDate(b.uploadedAt);
     const el = document.createElement('div');
     el.className = 'item';
     const r = k => rand(b.pathname, k);
     const drift = `--d:${(5 + r('d') * 4).toFixed(1)}s;--delay:-${(r('l') * 6).toFixed(1)}s;`;
     const scatter = `--span:${r('s') < .3 ? 4 : 3};--r:${(r('r') * 10 - 5).toFixed(1)}deg;--dx:${Math.round(r('x') * 12 - 6)}px;--dy:${Math.round(r('y') * 18)}px;`;
-    const isImg = /^(jpe?g|png|gif|webp|avif|heic)$/.test(ext), isVid = /^(mp4|mov|webm|m4v)$/.test(ext);
-    const geo = decodeURIComponent(b.pathname).match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
-    const where = geo ? { lat: +geo[1], lng: +geo[2] } : {}; // position pour la carte
+    const isImg = kind === 'img', isVid = kind === 'vid', where = geoOf(b.pathname); // position pour la carte
     if (isImg || isVid) {
       // Disposition « en vrac » : taille, format, inclinaison et décalage tirés au hasard (mais stables)
       el.classList.add('float');
@@ -1140,7 +1174,7 @@ async function loadItems(trip) {
         : `<video src="${b.src}#t=0.1" muted playsinline preload="metadata"></video><span class="play-badge"><i class="fa-solid fa-play"></i></span>`;
       const i = media.push({ kind: isImg ? 'img' : 'vid', src: b.src, ...where }) - 1;
       el.querySelector('img, video').onclick = () => openViewer(media, i);
-    } else if (ext === 'txt') {
+    } else if (kind === 'note') {
       // Note : même disposition en vrac que les photos, et s'ouvre aussi dans la visionneuse
       el.classList.add('float', 'note');
       el.style.cssText = drift + scatter;
@@ -1149,7 +1183,7 @@ async function loadItems(trip) {
       const i = media.push(m) - 1;
       fetch(b.src).then(r => r.text()).then(t => { m.text = el.querySelector('pre').textContent = t; });
       el.querySelector('pre').onclick = () => openViewer(media, i);
-    } else if (/^(weba|m4a|mp3|wav|ogg|aac|opus)$/.test(ext)) {
+    } else if (kind === 'aud') {
       el.classList.add('audio');
       el.style.cssText = drift;
       el.title = date;
@@ -1212,9 +1246,9 @@ function route() {
   $('#title').textContent = trip || 'Mes voyages';
   $('#delTrip').hidden = $('#actions').hidden = !trip;
   loadTrips();
-  setMenu(!trip);
+  setMenu(false);
   if (trip) return showTrip(trip);
-  main.innerHTML = '<div class="welcome"><i class="fa-solid fa-suitcase-rolling"></i><p>Ouvrez le menu pour choisir ou créer un voyage.</p></div>';
+  showHome();
 }
 addEventListener('hashchange', route);
 route();
