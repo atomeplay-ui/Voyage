@@ -811,26 +811,32 @@ function showMap() {
       maxZoom: 19, attribution: '© OpenStreetMap, © CARTO',
     }).addTo(map);
     mapLayer = L.layerGroup().addTo(map);
+    map.on('zoomend', drawPins);
   }
-  mapLayer.clearLayers();
-  const places = new Map();
-  for (const m of tripMedia) if (m.lat !== undefined) {
-    const k = `${m.lat.toFixed(3)},${m.lng.toFixed(3)}`;
-    places.set(k, [...(places.get(k) || []), m]);
-  }
-  $('.map-empty').hidden = places.size > 0;
-  const pts = [];
-  for (const group of places.values()) {
-    const cover = group.find(m => m.kind === 'img'), at = [group[0].lat, group[0].lng];
-    pts.push(at);
-    const inner = cover ? `<img src="${cover.src}" alt="">` : `<i class="fa-solid ${PIN_ICON[group[0].kind]}"></i>`;
-    L.marker(at, { icon: L.divIcon({ className: 'pin', html: inner + (group.length > 1 ? `<b>${group.length}</b>` : ''), iconSize: [54, 54], iconAnchor: [27, 62] }) })
-      .on('click', () => openViewer(group, 0))
-      .addTo(mapLayer);
-  }
+  const pts = tripMedia.filter(m => m.lat !== undefined).map(m => [m.lat, m.lng]);
+  $('.map-empty').hidden = pts.length > 0;
   map.invalidateSize();
   if (pts.length) map.fitBounds(pts, { padding: [60, 60], maxZoom: 15 });
   else map.setView([46.6, 2.4], 5);
+  drawPins();
+}
+
+// Regroupe les médias dont les points se chevaucheraient à l'écran (recalculé à chaque zoom, comme Plans)
+function drawPins() {
+  mapLayer.clearLayers();
+  const groups = [];
+  for (const m of tripMedia) if (m.lat !== undefined) {
+    const p = map.latLngToLayerPoint([m.lat, m.lng]);
+    const g = groups.find(g => g.p.distanceTo(p) < 56);
+    if (g) g.items.push(m); else groups.push({ p, at: [m.lat, m.lng], items: [m] });
+  }
+  for (const { at, items } of groups) {
+    const cover = items.find(m => m.kind === 'img');
+    const inner = cover ? `<img src="${cover.src}" alt="">` : `<i class="fa-solid ${PIN_ICON[items[0].kind]}"></i>`;
+    L.marker(at, { icon: L.divIcon({ className: 'pin', html: inner + (items.length > 1 ? `<b>${items.length}</b>` : ''), iconSize: [54, 54], iconAnchor: [27, 62] }) })
+      .on('click', () => openViewer(items, 0))
+      .addTo(mapLayer);
+  }
 }
 
 // Aléatoire stable tiré du nom du fichier : la disposition reste la même à chaque ouverture
