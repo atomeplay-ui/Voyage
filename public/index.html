@@ -65,6 +65,7 @@
     padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line); }
   #actions > * { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 12px; font-size: 12px; color: var(--muted); cursor: pointer; }
   #actions span { font-size: 26px; }
+  #actions b { font-weight: inherit; }
   #actions > *:active { background: var(--line); }
   #actions input { display: none; }
   #rec.on { color: var(--danger); animation: pulse 1s infinite; }
@@ -239,9 +240,9 @@ function route() {
   $('#title').textContent = trip || 'Mes voyages';
   $('#delTrip').hidden = $('#actions').hidden = !trip;
   loadTrips();
+  setMenu(!trip);
   if (trip) return showTrip(trip);
   main.innerHTML = '<div class="welcome"><div>🧳</div><p>Ouvrez le menu pour choisir ou créer un voyage.</p></div>';
-  setMenu(true);
 }
 addEventListener('hashchange', route);
 route();
