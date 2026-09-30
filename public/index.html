@@ -145,7 +145,6 @@
   .grid { display: grid; grid-template-columns: repeat(6, 1fr); grid-auto-flow: dense; gap: 16px 12px; padding: 4px 4px 24px; }
   @media (min-width: 600px) { .grid { grid-template-columns: repeat(9, 1fr); } }
   .item { position: relative; border-radius: 22px; padding: 0; }
-  .item.wide { grid-column: 1 / -1; padding: 14px 52px 14px 16px; }
   .item.float { grid-column: span var(--span, 3); padding: 6px; border-radius: 20px; margin-top: var(--dy, 0); align-self: start; }
   .item.float img, .item.float video { display: block; width: 100%; aspect-ratio: var(--ar, 1); object-fit: cover; border-radius: 14px; background: #000; cursor: zoom-in; }
   .item.float, .item.audio { transform: translateX(var(--dx, 0)) rotate(var(--r, 0deg)); animation: float var(--d, 6s) ease-in-out var(--delay, 0s) infinite; }
@@ -220,7 +219,7 @@
   .note-big time { display: block; margin-top: 14px; font-size: 13px; opacity: .65; }
   .del { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 50%; color: #fff; font-size: 13px;
     background: rgba(0,0,0,.28); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.3); }
-  .item:is(.audio, .note, .wide) .del { color: var(--text); background: rgba(127,127,127,.16); border-color: var(--surface-line); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .item:is(.audio, .note) .del { color: var(--text); background: rgba(127,127,127,.16); border-color: var(--surface-line); -webkit-backdrop-filter: none; backdrop-filter: none; }
   .item.audio .del { background: var(--glass-strong); }
   .empty { grid-column: 1 / -1; }
 
@@ -392,8 +391,8 @@ const main = $('#main'), toast = $('#toast');
 const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const currentTrip = () => decodeURIComponent(location.hash.slice(1));
 
-async function api(q = '', opts = {}) {
-  const r = await fetch('/api/trips' + q, { ...opts, headers: { 'content-type': 'application/json' } });
+async function api(path = '/api/trips', opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { 'content-type': 'application/json' } });
   const json = await r.json();
   if (!r.ok) { alert(json.error || 'Erreur'); throw new Error(json.error); }
   return json;
@@ -423,7 +422,7 @@ $('#tripList').onclick = e => {
 $('#new').onsubmit = async e => {
   e.preventDefault();
   const name = e.target.name.value.trim();
-  await api('', { method: 'POST', body: JSON.stringify({ name }) });
+  await api('/api/trips', { method: 'POST', body: JSON.stringify({ name }) });
   e.target.reset();
   setMenu(false);
   location.hash = encodeURIComponent(name);
@@ -467,16 +466,22 @@ async function exifGps(file) {
 }
 
 // Envoi des médias. live = pris dans l'appli (position actuelle) ; sinon position lue dans la photo importée.
-// Les coordonnées vont dans le nom du fichier (« photo-…@45.12345,6.12345.jpg ») : pas besoin de base de données.
+// Le fichier part dans Vercel Blob, puis ses informations (type, position) sont enregistrées dans la base.
+// Une note (ou un .txt importé) ne crée pas de fichier : son texte va directement dans la base.
+const kindOfFile = f => kindOf(f.name) || { image: 'img', video: 'vid', audio: 'aud' }[f.type.split('/')[0]];
 async function send(files, live) {
   const trip = currentTrip();
   try {
     for (const [i, f] of [...files].entries()) {
       toast.hidden = false;
       toast.textContent = `Envoi ${i + 1}/${files.length} : ${f.name}…`;
+      const kind = kindOfFile(f);
+      if (!kind) continue;
       const pos = live ? await here() : await exifGps(f).catch(() => null);
-      const name = pos ? f.name.replace(/(\.\w+)?$/, `@${pos.lat.toFixed(5)},${pos.lng.toFixed(5)}$1`) : f.name;
-      await uploadPresigned(`trips/${trip}/${name}`, f, { access: 'private', handleUploadUrl: '/api/upload' });
+      const media = { trip, kind, lat: pos?.lat, lng: pos?.lng };
+      if (kind === 'note') media.text = await f.text();
+      else media.pathname = (await uploadPresigned(`trips/${trip}/${f.name}`, f, { access: 'private', handleUploadUrl: '/api/upload' })).pathname;
+      await api('/api/media', { method: 'POST', body: JSON.stringify(media) });
     }
   } catch (e) {
     alert('Échec de l’envoi : ' + e.message);
@@ -811,7 +816,7 @@ recBtns.forEach(b => b.onclick = async () => {
 $('#delTrip').onclick = async () => {
   const trip = currentTrip();
   if (!confirm(`Supprimer « ${trip} » et tout son contenu ?`)) return;
-  await api(`?trip=${encodeURIComponent(trip)}`, { method: 'DELETE' });
+  await api(`/api/trips?trip=${encodeURIComponent(trip)}`, { method: 'DELETE' });
   location.hash = '';
 };
 
@@ -820,29 +825,24 @@ const SHEET_HTML = `<div class="map-sheet" id="mapSheet" hidden><div class="shee
   <button id="sheetOpen" hidden>Ouvrir <i class="fa-solid fa-chevron-right"></i></button>
   <button id="sheetClose" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button></div><div class="sheet-strip" id="sheetStrip"></div></div>`;
 
-// Type et position d'un média, lus dans son nom de fichier (position : « …@lat,lng… »)
-const kindOf = path => {
-  const ext = path.split('.').pop().toLowerCase();
+// Type d'un fichier d'après son extension
+const kindOf = name => {
+  const ext = name.split('.').pop().toLowerCase();
   return /^(jpe?g|png|gif|webp|avif|heic)$/.test(ext) ? 'img' : /^(mp4|mov|webm|m4v)$/.test(ext) ? 'vid'
     : /^(weba|m4a|mp3|wav|ogg|aac|opus)$/.test(ext) ? 'aud' : ext === 'txt' ? 'note' : null;
 };
-const geoOf = path => {
-  const g = decodeURIComponent(path).match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
-  return g ? { lat: +g[1], lng: +g[2] } : {};
-};
 const fmtDate = d => new Date(d).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+// Ligne de la base → média pour la visionneuse et la carte
+const toMedia = r => ({ id: r.id, kind: r.kind, src: r.src, text: r.text || '', date: fmtDate(r.created_at), trip: r.trip,
+  ...(r.lat !== null ? { lat: r.lat, lng: r.lng } : {}) });
 
 // Accueil : la carte de tous les voyages
 async function showHome() {
   main.innerHTML = `<section id="mapTab" class="home-map"><h2 class="home-title">Tous mes voyages</h2><div id="map"></div>${SHEET_HTML}
     <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.<br>Ouvrez le menu <i class="fa-solid fa-bars"></i> pour créer un voyage.</p></section>`;
-  const blobs = await api('?all=1');
+  const rows = await api('/api/trips?all=1');
   if (currentTrip()) return;
-  tripMedia = blobs.map(b => {
-    const m = { kind: kindOf(b.pathname), src: b.src, date: fmtDate(b.uploadedAt), trip: b.trip, ...geoOf(b.pathname) };
-    if (m.kind === 'note') fetch(b.src).then(r => r.text()).then(t => { m.text = t; });
-    return m;
-  }).filter(m => m.kind);
+  tripMedia = rows.map(toMedia);
   showMap();
 }
 
@@ -1170,58 +1170,49 @@ addEventListener('keydown', e => {
 });
 
 async function loadItems(trip) {
-  const blobs = (await api(`?trip=${encodeURIComponent(trip)}`))
-    .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+  const rows = await api(`/api/trips?trip=${encodeURIComponent(trip)}`); // du plus récent au plus ancien
   const box = $('#items');
   if (!box || currentTrip() !== trip) return;
-  box.innerHTML = blobs.length ? '' : '<p class="empty">Ce voyage est vide.<br>Ajoutez une photo, une vidéo, un audio ou une note.</p>';
-  const media = []; // photos et vidéos, dans l'ordre d'affichage, pour la visionneuse
-  for (const b of blobs) {
-    const kind = kindOf(b.pathname), date = fmtDate(b.uploadedAt);
+  box.innerHTML = rows.length ? '' : '<p class="empty">Ce voyage est vide.<br>Ajoutez une photo, une vidéo, un audio ou une note.</p>';
+  const media = []; // dans l'ordre d'affichage, pour la visionneuse et la carte
+  for (const row of rows) {
+    const m = toMedia(row), { kind, date, src } = m;
     const el = document.createElement('div');
     el.className = 'item';
-    const r = k => rand(b.pathname, k);
+    const r = k => rand(row.pathname || `note-${row.id}`, k);
     const drift = `--d:${(5 + r('d') * 4).toFixed(1)}s;--delay:-${(r('l') * 6).toFixed(1)}s;`;
     const scatter = `--span:${r('s') < .3 ? 4 : 3};--r:${(r('r') * 10 - 5).toFixed(1)}deg;--dx:${Math.round(r('x') * 12 - 6)}px;--dy:${Math.round(r('y') * 18)}px;`;
-    const isImg = kind === 'img', isVid = kind === 'vid', where = geoOf(b.pathname); // position pour la carte
-    if (isImg || isVid) {
+    const i = media.push(m) - 1;
+    if (kind === 'img' || kind === 'vid') {
       // Disposition « en vrac » : taille, format, inclinaison et décalage tirés au hasard (mais stables)
       el.classList.add('float');
       el.style.cssText = drift + scatter + `--ar:${['1', '4/5', '3/4', '5/4'][Math.floor(r('a') * 4)]}`;
-      el.innerHTML = isImg
-        ? `<img src="${b.src}" loading="lazy" alt="">`
-        : `<video src="${b.src}#t=0.1" muted playsinline preload="metadata"></video><span class="play-badge"><i class="fa-solid fa-play"></i></span>`;
-      const i = media.push({ kind: isImg ? 'img' : 'vid', src: b.src, ...where }) - 1;
+      el.innerHTML = kind === 'img'
+        ? `<img src="${src}" loading="lazy" alt="">`
+        : `<video src="${src}#t=0.1" muted playsinline preload="metadata"></video><span class="play-badge"><i class="fa-solid fa-play"></i></span>`;
       el.querySelector('img, video').onclick = () => openViewer(media, i);
     } else if (kind === 'note') {
       // Note : même disposition en vrac que les photos, et s'ouvre aussi dans la visionneuse
       el.classList.add('float', 'note');
       el.style.cssText = drift + scatter;
-      el.innerHTML = `<i class="fa-solid fa-quote-left"></i><pre></pre><time>${date}</time>`;
-      const m = { kind: 'note', text: '', date, src: b.src, ...where };
-      const i = media.push(m) - 1;
-      fetch(b.src).then(r => r.text()).then(t => { m.text = el.querySelector('pre').textContent = t; });
+      el.innerHTML = `<i class="fa-solid fa-quote-left"></i><pre>${esc(m.text)}</pre><time>${date}</time>`;
       el.querySelector('pre').onclick = () => openViewer(media, i);
-    } else if (kind === 'aud') {
+    } else {
       el.classList.add('audio');
       el.style.cssText = drift;
       el.title = date;
-      el.innerHTML = audioHTML(b.src, date, '');
+      el.innerHTML = audioHTML(src, date, '');
       wireAudio(el);
       // Le rond lit l'audio sur place ; toucher la durée l'ouvre dans la visionneuse
-      const i = media.push({ kind: 'aud', src: b.src, date, ...where }) - 1;
       el.querySelector('.len').onclick = () => openViewer(media, i);
-    } else {
-      el.classList.add('wide');
-      el.innerHTML = `<a href="${b.src}" target="_blank">${esc(b.pathname.split('/').pop())}</a>`;
     }
     const del = document.createElement('button');
     del.className = 'del'; del.innerHTML = '<i class="fa-solid fa-xmark"></i>'; del.setAttribute('aria-label', 'Supprimer');
     del.onclick = async () => {
       if (!confirm('Supprimer ce média ?')) return;
-      await api(`?url=${encodeURIComponent(b.url)}`, { method: 'DELETE' });
+      await api(`/api/media?id=${row.id}`, { method: 'DELETE' });
       el.remove();
-      tripMedia = tripMedia.filter(m => m.src !== b.src); // retire aussi le point de la carte
+      tripMedia = tripMedia.filter(x => x.id !== row.id); // retire aussi le point de la carte
     };
     el.append(del);
     box.append(el);

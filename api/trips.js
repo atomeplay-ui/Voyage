@@ -1,57 +1,37 @@
-import { list, createFolder, del, issueSignedToken, presignUrl } from '@vercel/blob';
+import { del } from '@vercel/blob';
+import { sql, schema, withSrc } from './_db.js';
 
-// Un voyage = un "dossier" trips/<nom>/ dans Vercel Blob (store privé). Pas de base de données.
+// Voyages (base Neon). Les fichiers restent dans Vercel Blob, la base garde leurs informations.
 // ponytail: pas d'authentification pour l'instant, n'importe qui avec l'URL peut lire/modifier.
-async function listAll(opts) {
-  const blobs = [], folders = [];
-  let cursor;
-  do {
-    const r = await list({ ...opts, cursor });
-    blobs.push(...r.blobs);
-    folders.push(...(r.folders || []));
-    cursor = r.cursor;
-  } while (cursor);
-  return { blobs, folders };
-}
-
-// Store privé : ajoute à chaque média un lien de lecture signé, valable 1 h.
-async function withSrc(blobs) {
-  const token = await issueSignedToken({ pathname: '*', operations: ['get'] });
-  for (const b of blobs) b.src = (await presignUrl(token, { operation: 'get', pathname: b.pathname, access: 'private' })).presignedUrl;
-  return blobs;
-}
-
 export default async function handler(req, res) {
-  const { trip, url, all } = req.query;
+  await schema();
+  const { trip, all } = req.query;
 
   if (req.method === 'GET') {
-    // Carte de l'accueil : tous les médias localisés (« …@lat,lng… » dans le nom), avec leur voyage
-    if (all) {
-      const blobs = (await listAll({ prefix: 'trips/' })).blobs.filter(b => b.pathname.includes('@'));
-      for (const b of blobs) b.trip = b.pathname.split('/')[1];
-      return res.json(await withSrc(blobs));
-    }
-    if (!trip) {
-      const { folders } = await listAll({ prefix: 'trips/', mode: 'folded' });
-      return res.json(folders.map(f => f.slice('trips/'.length, -1)));
-    }
-    // Ignore le dossier lui-même (et les anciens fichiers .keep des premiers voyages)
-    const blobs = (await listAll({ prefix: `trips/${trip}/` })).blobs.filter(b => !/\/(\.keep)?$/.test(b.pathname));
-    return res.json(await withSrc(blobs));
+    // Carte de l'accueil : tous les médias localisés, avec leur voyage
+    if (all) return res.json(await withSrc(await sql`
+      select m.*, t.name as trip from media m join trips t on t.id = m.trip_id
+      where m.lat is not null order by m.created_at desc`));
+    if (!trip) return res.json((await sql`select name from trips order by created_at`).map(r => r.name));
+    return res.json(await withSrc(await sql`
+      select m.* from media m join trips t on t.id = m.trip_id
+      where t.name = ${trip} order by m.created_at desc`));
   }
 
   if (req.method === 'POST') {
     const name = String(req.body?.name || '').trim();
     if (!name || name.includes('/')) return res.status(400).json({ error: 'Nom invalide' });
-    // Un voyage du même nom existe déjà : rien à créer
-    await createFolder(`trips/${name}/`, { access: 'private' }).catch(e => { if (!/exist/i.test(e.message)) throw e; });
+    await sql`insert into trips (name) values (${name}) on conflict (name) do nothing`;
     return res.json({ name });
   }
 
   if (req.method === 'DELETE') {
-    if (!trip && !url) return res.status(400).json({ error: 'trip ou url requis' });
-    const urls = url ? [url] : (await listAll({ prefix: `trips/${trip}/` })).blobs.map(b => b.url);
-    if (urls.length) await del(urls);
+    if (!trip) return res.status(400).json({ error: 'trip requis' });
+    const files = (await sql`
+      select m.pathname from media m join trips t on t.id = m.trip_id
+      where t.name = ${trip} and m.pathname is not null`).map(r => r.pathname);
+    if (files.length) await del(files);
+    await sql`delete from trips where name = ${trip}`; // supprime aussi ses médias (cascade)
     return res.json({ ok: true });
   }
 
