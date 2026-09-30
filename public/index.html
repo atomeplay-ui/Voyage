@@ -103,6 +103,26 @@
     50% { transform: translate(var(--dx, 0), -7px) rotate(calc(var(--r, 0deg) * .6)); }
   }
   @media (prefers-reduced-motion: reduce) { .item.float, .item.audio { animation: none; } }
+  .item.float img, .item.float video { cursor: zoom-in; }
+  .play-badge { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
+    color: #fff; font-size: 16px; pointer-events: none; background: rgba(0,0,0,.3); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.35); }
+  .play-badge i { margin-left: 3px; }
+
+  /* Visionneuse plein écran */
+  body.viewer-open { overflow: hidden; }
+  #viewer { position: fixed; z-index: 55; inset: 0; background: rgba(0,0,0,.94); color: #fff; }
+  #viewerTrack { display: flex; height: 100%; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior: contain; scrollbar-width: none; }
+  #viewerTrack::-webkit-scrollbar { display: none; }
+  .slide { flex: 0 0 100%; height: 100%; scroll-snap-align: center; scroll-snap-stop: always; display: grid; place-items: center;
+    padding: calc(env(safe-area-inset-top) + 64px) 0 calc(env(safe-area-inset-bottom) + 24px); }
+  .slide img, .slide video { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .viewer-top { position: absolute; inset: 0 0 auto 0; padding: calc(env(safe-area-inset-top) + 10px) 14px 0; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
+  .viewer-top > * { pointer-events: auto; }
+  #viewerClose, .viewer-top .spacer { width: 44px; height: 44px; border-radius: 50%; color: #fff; font-size: 20px; }
+  #viewerCount { padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .viewer-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 50%; color: #fff; font-size: 18px; display: none; }
+  #viewerPrev { left: 16px; } #viewerNext { right: 16px; }
+  @media (hover: hover) { .viewer-nav { display: grid; place-items: center; } }
 
   /* Lecteur audio rond : anneau de progression + durée */
   .item.audio { grid-column: span 2; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 2px 0; align-self: center; }
@@ -201,6 +221,17 @@
   <button id="rec"><i class="fa-solid fa-microphone"></i><b>Audio</b></button>
 </footer>
 <div id="toast" hidden></div>
+
+<div id="viewer" hidden>
+  <div id="viewerTrack"></div>
+  <div class="viewer-top">
+    <button id="viewerClose" class="cam-glass" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+    <span id="viewerCount" class="cam-glass"></span>
+    <span class="spacer"></span>
+  </div>
+  <button id="viewerPrev" class="viewer-nav cam-glass" aria-label="Précédent"><i class="fa-solid fa-chevron-left"></i></button>
+  <button id="viewerNext" class="viewer-nav cam-glass" aria-label="Suivant"><i class="fa-solid fa-chevron-right"></i></button>
+</div>
 
 <div id="cam" hidden>
   <div class="cam-top">
@@ -467,12 +498,54 @@ function wireAudio(el) {
   el.querySelector('.ring').onclick = () => { if (a.paused) a.play(); else a.pause(); };
 }
 
+// Visionneuse plein écran : défilement horizontal aimanté (glisser au doigt entre photos et vidéos)
+const viewer = $('#viewer'), track = $('#viewerTrack');
+let viewerIdx = 0;
+
+function openViewer(media, i) {
+  track.innerHTML = media.map(m => `<div class="slide">${m.isImg
+    ? `<img src="${m.src}" loading="lazy" alt="">`
+    : `<video src="${m.src}" controls playsinline preload="metadata"></video>`}</div>`).join('');
+  viewer.hidden = false;
+  document.body.classList.add('viewer-open');
+  track.scrollLeft = i * track.clientWidth;
+  viewerIdx = -1;
+  onViewerScroll();
+}
+
+function closeViewer() {
+  viewer.hidden = true;
+  track.innerHTML = ''; // arrête les vidéos et les chargements
+  document.body.classList.remove('viewer-open');
+}
+
+function onViewerScroll() {
+  const i = Math.round(track.scrollLeft / track.clientWidth);
+  if (i === viewerIdx) return;
+  viewerIdx = i;
+  $('#viewerCount').textContent = `${i + 1} / ${track.children.length}`;
+  track.querySelectorAll('video').forEach(v => v.pause()); // on coupe la vidéo qu'on vient de quitter
+}
+const viewerGo = step => track.scrollBy({ left: step * track.clientWidth, behavior: 'smooth' });
+
+track.onscroll = onViewerScroll;
+$('#viewerClose').onclick = closeViewer;
+$('#viewerPrev').onclick = () => viewerGo(-1);
+$('#viewerNext').onclick = () => viewerGo(1);
+addEventListener('keydown', e => {
+  if (viewer.hidden) return;
+  if (e.key === 'Escape') closeViewer();
+  if (e.key === 'ArrowLeft') viewerGo(-1);
+  if (e.key === 'ArrowRight') viewerGo(1);
+});
+
 async function loadItems(trip) {
   const blobs = (await api(`?trip=${encodeURIComponent(trip)}`))
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
   const box = $('#items');
   if (!box || currentTrip() !== trip) return;
   box.innerHTML = blobs.length ? '' : '<p class="empty" style="grid-column:1/-1">Ce voyage est vide.<br>Ajoutez une photo, une vidéo, un audio ou une note.</p>';
+  const media = []; // photos et vidéos, dans l'ordre d'affichage, pour la visionneuse
   for (const b of blobs) {
     const ext = b.pathname.split('.').pop().toLowerCase();
     const date = new Date(b.uploadedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
@@ -486,8 +559,10 @@ async function loadItems(trip) {
       el.classList.add('float');
       el.style.cssText = drift + `--span:${r('s') < .3 ? 4 : 3};--r:${(r('r') * 10 - 5).toFixed(1)}deg;--dx:${Math.round(r('x') * 12 - 6)}px;--dy:${Math.round(r('y') * 18)}px;--ar:${['1', '4/5', '3/4', '5/4'][Math.floor(r('a') * 4)]}`;
       el.innerHTML = isImg
-        ? `<a href="${b.src}" target="_blank"><img src="${b.src}" loading="lazy" alt=""></a>`
-        : `<video src="${b.src}#t=0.1" controls playsinline preload="metadata"></video>`;
+        ? `<img src="${b.src}" loading="lazy" alt="">`
+        : `<video src="${b.src}#t=0.1" muted playsinline preload="metadata"></video><span class="play-badge"><i class="fa-solid fa-play"></i></span>`;
+      const i = media.push({ isImg, src: b.src }) - 1;
+      el.querySelector('img, video').onclick = () => openViewer(media, i);
     } else if (/^(weba|m4a|mp3|wav|ogg|aac|opus)$/.test(ext)) {
       el.classList.add('audio');
       el.style.cssText = drift;
