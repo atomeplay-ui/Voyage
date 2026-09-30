@@ -598,7 +598,8 @@ $('#shutter').onclick = () => { cam.dataset.mode === 'photo' ? takePhoto() : tog
 modes.onclick = e => { if (e.target.dataset.mode) setMode(e.target.dataset.mode); };
 // Glisser à droite -> VIDÉO, à gauche -> PHOTO
 let touchX = null;
-cam.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+// Un deuxième doigt annule le glissement (c'est un pincement)
+cam.addEventListener('touchstart', e => { touchX = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
 cam.addEventListener('touchend', e => {
   if (touchX === null) return;
   const dx = e.changedTouches[0].clientX - touchX;
@@ -606,6 +607,21 @@ cam.addEventListener('touchend', e => {
   if (Math.abs(dx) > 50) setMode(dx > 0 ? 'video' : 'photo');
 });
 addEventListener('keydown', e => e.key === 'Escape' && !cam.hidden && closeCam());
+
+// Pincer l'aperçu pour zoomer : même zoom que la barre d'objectifs
+let camPinch = null;
+const camDist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+const camViewBox = $('.cam-view');
+camViewBox.addEventListener('touchstart', e => {
+  if (e.touches.length === 2 && lens.stops.length) camPinch = { d0: camDist(e.touches), z0: lens.z };
+}, { passive: true });
+camViewBox.addEventListener('touchmove', e => {
+  if (camPinch && e.touches.length === 2) setZoom(camPinch.z0 * camDist(e.touches) / camPinch.d0, false);
+}, { passive: true });
+camViewBox.addEventListener('touchend', e => {
+  if (camPinch && e.touches.length < 2) { camPinch = null; setZoom(lens.z, true); }
+});
+cam.addEventListener('gesturestart', e => e.preventDefault()); // empêche Safari de zoomer toute la page
 
 // Enregistrement audio (bouton de la barre du bas et bouton de la caméra)
 let rec;
