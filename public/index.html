@@ -909,6 +909,7 @@ function openSheet(items) {
     `<button class="sheet-item ${m.kind}" data-i="${i}">${m.kind === 'vid' ? `<video src="${m.src}#t=0.1" muted playsinline preload="metadata"></video><i class="fa-solid fa-play badge"></i>` : thumbHTML(m)}</button>`).join('');
   $('#sheetStrip').onclick = e => { const b = e.target.closest('[data-i]'); if (b) openViewer(items, +b.dataset.i); };
   $('#mapSheet').hidden = false;
+  map.easeTo({ center: [items[0].lng, items[0].lat], offset: [0, -90], duration: 500 }); // garde le point visible au-dessus du panneau
 }
 function closeSheet() { const s = $('#mapSheet'); if (s) s.hidden = true; }
 document.addEventListener('click', e => { if (e.target.closest('#sheetClose')) closeSheet(); });
