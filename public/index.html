@@ -219,6 +219,22 @@
   #shutter:active::after { transform: scale(.9); }
   #cam[data-mode=video] #shutter::after { background: var(--danger); }
   #cam.rec #shutter::after { width: 42%; height: 42%; border-radius: 6px; }
+  .cam-top { display: grid; grid-template-columns: 1fr auto 1fr; }
+  .cam-top > div { display: flex; gap: 10px; }
+  .cam-top > div:last-child { justify-content: flex-end; }
+  /* Flash : éclair barré (désactivé), avec un « A » (auto), jaune (activé) */
+  #camFlash { position: relative; display: grid; place-items: center; }
+  #camFlash[data-flash=on] { color: #ffd60a; }
+  #camFlash[data-flash=off]::after { content: ''; position: absolute; width: 24px; height: 2px; border-radius: 2px; background: #fff; transform: rotate(-45deg); box-shadow: 0 0 0 1.5px rgba(0,0,0,.35); }
+  #camFlash[data-flash=auto]::after { content: 'A'; position: absolute; right: 7px; bottom: 6px; font-size: 10px; font-weight: 800; }
+  #cam.screen-flash::after { content: ''; position: fixed; z-index: 10; inset: 0; background: #fff; }
+  /* Sélecteur d'objectifs (0,5 · 1 · 2 · 3) */
+  .lenses { display: flex; gap: 6px; width: max-content; margin: 0 auto 8px; padding: 4px; border-radius: 999px; touch-action: none;
+    background: rgba(0,0,0,.28); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+  .lenses button { min-width: 34px; height: 34px; padding: 0 6px; align-self: center; border-radius: 999px; color: #fff; font-size: 12px; font-weight: 700;
+    font-variant-numeric: tabular-nums; background: rgba(255,255,255,.14); transition: min-width .15s, height .15s; }
+  .lenses button.on { min-width: 44px; height: 44px; color: #ffd60a; font-size: 13px; background: rgba(0,0,0,.4); }
+  #cam.rec .lenses.devices { visibility: hidden; }
   body.cam-open #toast { bottom: auto; top: calc(env(safe-area-inset-top) + 64px); }
 
   /* Grand écran : menu toujours visible */
@@ -265,12 +281,16 @@
 
 <div id="cam" hidden>
   <div class="cam-top">
-    <button id="camClose" class="cam-glass" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+    <div>
+      <button id="camClose" class="cam-glass" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+      <button id="camFlash" class="cam-glass" data-flash="off" hidden><i class="fa-solid fa-bolt"></i></button>
+    </div>
     <span id="camTimer" class="cam-glass">00:00:00</span>
-    <button id="camRec" class="cam-glass" aria-label="Enregistrer un audio"><i class="fa-solid fa-microphone"></i></button>
+    <div><button id="camRec" class="cam-glass" aria-label="Enregistrer un audio"><i class="fa-solid fa-microphone"></i></button></div>
   </div>
   <div class="cam-view"><video id="camView" autoplay playsinline muted></video></div>
   <div class="cam-bottom">
+    <div class="lenses" id="lenses" hidden></div>
     <div class="modes" id="modes"><button data-mode="video">VIDÉO</button><button data-mode="photo">PHOTO</button></div>
     <div class="cam-row cam-glass">
       <label id="camImport" aria-label="Importer depuis la galerie"><i class="fa-solid fa-images"></i><input type="file" multiple accept="image/*,video/*,audio/*,text/plain"></label>
@@ -343,16 +363,19 @@ async function send(files) {
 $('#camImport input').onchange = e => send(e.target.files).finally(() => e.target.value = '');
 
 // Caméra intégrée, façon appareil photo iOS : glisser pour passer de PHOTO à VIDÉO
-const cam = $('#cam'), camView = $('#camView'), camTimer = $('#camTimer'), modes = $('#modes');
-let camStream, camRec, camTick, camReq = 0, facing = 'environment';
+const cam = $('#cam'), camView = $('#camView'), camTimer = $('#camTimer'), modes = $('#modes'), lensesEl = $('#lenses'), flashBtn = $('#camFlash');
+let camStream, camRec, camTick, camReq = 0, facing = 'environment', lensId = null;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const videoTrack = () => camStream?.getVideoTracks()[0];
 
 async function startCam() {
   const req = ++camReq; // ignore les demandes dépassées (changement de mode rapide)
   camStream?.getTracks().forEach(t => t.stop());
   let stream;
   try {
+    const which = lensId && facing === 'environment' ? { deviceId: { exact: lensId } } : { facingMode: facing };
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: { ...which, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: cam.dataset.mode === 'video',
     });
   } catch (e) {
@@ -362,6 +385,132 @@ async function startCam() {
   if (req !== camReq || cam.hidden) return stream.getTracks().forEach(t => t.stop());
   camView.srcObject = camStream = stream;
   cam.classList.toggle('front', facing === 'user');
+  await setupLenses();
+  applyTorch();
+}
+
+// Objectifs : 1) zoom matériel si la caméra le propose (Chrome Android, Safari récent),
+// 2) sinon bascule entre objectifs physiques repérés par leur nom (ultra grand-angle, téléobjectif),
+// 3) sinon zoom numérique (photo uniquement : on recadre le centre de l'image).
+let lens = { kind: 'none', stops: [], z: 1, min: 1, max: 1, devices: [] };
+
+async function backLenses() {
+  const all = (await navigator.mediaDevices.enumerateDevices())
+    .filter(d => d.kind === 'videoinput' && !/front|avant|user|facetime/i.test(d.label));
+  const out = [];
+  for (const d of all) {
+    // Les caméras « Dual » / « Triple » d'iOS sont virtuelles : on garde les objectifs réels
+    const z = /ultra/i.test(d.label) ? 0.5 : /t[ée]l[ée]/i.test(d.label) ? 2 : /dual|triple|double/i.test(d.label) ? null : 1;
+    if (z !== null && !out.some(o => o.z === z)) out.push({ z, id: d.deviceId });
+  }
+  return out.sort((a, b) => a.z - b.z);
+}
+
+async function setupLenses() {
+  const track = videoTrack(), caps = track?.getCapabilities?.() || {};
+  torchOK = !!caps.torch;
+  let devs;
+  if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+    const { min, max } = caps.zoom;
+    const stops = [...new Set([min < 1 ? min : 1, 1, 2, 3, 5])].filter(v => v >= min && v <= max);
+    lens = { kind: 'hw', stops, min, max, z: track.getSettings().zoom || 1 };
+  } else if (facing === 'environment' && (devs = await backLenses()).length > 1) {
+    const cur = devs.find(d => d.id === track.getSettings().deviceId) || devs.find(d => d.z === 1) || devs[0];
+    lens = { kind: 'dev', stops: devs.map(d => d.z), devices: devs, z: cur.z };
+  } else if (cam.dataset.mode === 'photo') {
+    lens = { kind: 'digital', stops: [1, 2, 3], min: 1, max: 5, z: 1 };
+  } else {
+    lens = { kind: 'none', stops: [], z: 1 };
+  }
+  applyZoomView();
+  renderLenses();
+  renderFlash();
+}
+
+function setZoom(z, done) {
+  if (lens.kind === 'dev') {
+    // Objectifs physiques : on affiche le plus proche, et on change de caméra au lâcher
+    const d = lens.devices.reduce((a, b) => Math.abs(b.z - z) < Math.abs(a.z - z) ? b : a);
+    lens.z = d.z;
+    renderLenses();
+    if (done && !camRec && d.id !== videoTrack()?.getSettings().deviceId) { lensId = d.id; startCam(); }
+    return;
+  }
+  lens.z = Math.min(lens.max, Math.max(lens.min, z));
+  renderLenses();
+  if (lens.kind === 'hw') videoTrack()?.applyConstraints({ advanced: [{ zoom: lens.z }] }).catch(() => {});
+  applyZoomView();
+}
+
+function applyZoomView() {
+  const z = lens.kind === 'digital' ? lens.z : 1;
+  camView.style.transform = `scale(${facing === 'user' ? -z : z}, ${z})`; // miroir pour la caméra avant
+}
+
+const fmtZ = z => String(Math.round(z * 10) / 10).replace('.', ',');
+function renderLenses() {
+  lensesEl.hidden = !lens.stops.length;
+  lensesEl.classList.toggle('devices', lens.kind === 'dev');
+  const active = lens.stops.reduce((a, s) => lens.z >= s - 0.05 ? s : a, lens.stops[0]);
+  lensesEl.innerHTML = lens.stops.map(s =>
+    `<button data-z="${s}" class="${s === active ? 'on' : ''}">${s === active ? fmtZ(lens.z) + '×' : fmtZ(s)}</button>`).join('');
+}
+
+// Toucher un objectif pour y aller, ou glisser sur la barre pour zoomer en continu (à gauche = zoomer, comme la molette d'iOS)
+let lensDrag = null;
+lensesEl.addEventListener('pointerdown', e => {
+  lensDrag = { x: e.clientX, z0: lens.z, moved: false };
+  lensesEl.setPointerCapture(e.pointerId);
+});
+lensesEl.addEventListener('pointermove', e => {
+  if (!lensDrag) return;
+  const dx = e.clientX - lensDrag.x;
+  if (Math.abs(dx) > 6) lensDrag.moved = true;
+  if (lensDrag.moved) setZoom(lensDrag.z0 * Math.exp(-dx / 90), false);
+});
+lensesEl.addEventListener('pointerup', e => {
+  if (!lensDrag) return;
+  const { moved } = lensDrag;
+  lensDrag = null;
+  if (moved) return setZoom(lens.z, true);
+  const b = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-z]');
+  if (b) setZoom(+b.dataset.z, true);
+});
+lensesEl.addEventListener('pointercancel', () => { lensDrag = null; });
+// Glisser sur les objectifs ne doit pas faire passer de PHOTO à VIDÉO
+['touchstart', 'touchend'].forEach(t => lensesEl.addEventListener(t, e => e.stopPropagation()));
+
+// Flash : désactivé / auto / activé en photo, désactivé / activé (lampe continue) en vidéo.
+// Caméra arrière : vraie lampe si le navigateur y a accès. Caméra avant : écran blanc (« flash Retina »).
+let flashMode = 'off', torchOK = false;
+const FLASH_CYCLE = { photo: ['off', 'auto', 'on'], video: ['off', 'on'] };
+function renderFlash() {
+  const mode = cam.dataset.mode;
+  if (mode === 'video' && flashMode === 'auto') flashMode = 'off';
+  flashBtn.hidden = !(torchOK || (mode === 'photo' && facing === 'user'));
+  flashBtn.dataset.flash = flashMode;
+  flashBtn.setAttribute('aria-label', 'Flash : ' + { off: 'désactivé', auto: 'automatique', on: 'activé' }[flashMode]);
+}
+function applyTorch(on = cam.dataset.mode === 'video' && flashMode === 'on') {
+  if (torchOK) videoTrack()?.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {});
+}
+flashBtn.onclick = () => {
+  const cycle = FLASH_CYCLE[cam.dataset.mode];
+  flashMode = cycle[(cycle.indexOf(flashMode) + 1) % cycle.length];
+  renderFlash();
+  applyTorch();
+};
+
+// Mode auto : on mesure la luminosité moyenne de l'aperçu
+function isDark() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 16;
+  const g = c.getContext('2d');
+  g.drawImage(camView, 0, 0, 16, 16);
+  const d = g.getImageData(0, 0, 16, 16).data;
+  let sum = 0;
+  for (let i = 0; i < d.length; i += 4) sum += d[i] * .3 + d[i + 1] * .59 + d[i + 2] * .11;
+  return sum / 256 < 70;
 }
 
 function setMode(mode) {
@@ -393,15 +542,24 @@ function closeCam() {
   camStream = null;
   camView.srcObject = null;
   cam.hidden = true;
+  cam.classList.remove('screen-flash');
   document.body.classList.remove('cam-open');
 }
 
-function takePhoto() {
+async function takePhoto() {
+  const vw = camView.videoWidth, vh = camView.videoHeight;
+  if (!vw) return;
+  const fire = flashMode === 'on' || (flashMode === 'auto' && isDark());
+  if (fire) {
+    if (torchOK && facing === 'environment') { applyTorch(true); await wait(500); } // laisse l'exposition s'adapter à la lumière
+    else { cam.classList.add('screen-flash'); await wait(300); }
+  }
+  const z = lens.kind === 'digital' ? lens.z : 1;
   const c = document.createElement('canvas');
-  c.width = camView.videoWidth;
-  c.height = camView.videoHeight;
-  if (!c.width) return;
-  c.getContext('2d').drawImage(camView, 0, 0);
+  c.width = vw;
+  c.height = vh;
+  c.getContext('2d').drawImage(camView, (vw - vw / z) / 2, (vh - vh / z) / 2, vw / z, vh / z, 0, 0, vw, vh);
+  if (fire) { applyTorch(false); cam.classList.remove('screen-flash'); }
   cam.classList.add('flash');
   setTimeout(() => cam.classList.remove('flash'), 120);
   c.toBlob(b => {
@@ -435,7 +593,7 @@ function toggleVideo() {
 
 $('#camBtn').onclick = openCam;
 $('#camClose').onclick = closeCam;
-$('#camFlip').onclick = () => { if (camRec) return; facing = facing === 'user' ? 'environment' : 'user'; startCam(); };
+$('#camFlip').onclick = () => { if (camRec) return; facing = facing === 'user' ? 'environment' : 'user'; lensId = null; startCam(); };
 $('#shutter').onclick = () => { cam.dataset.mode === 'photo' ? takePhoto() : toggleVideo(); };
 modes.onclick = e => { if (e.target.dataset.mode) setMode(e.target.dataset.mode); };
 // Glisser à droite -> VIDÉO, à gauche -> PHOTO
