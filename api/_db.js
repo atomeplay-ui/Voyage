@@ -29,6 +29,8 @@ export function schema() {
     await sql`alter table trips add column if not exists user_id text`;
     await sql`alter table trips drop constraint if exists trips_name_key`;
     await sql`create unique index if not exists trips_user_name on trips (user_id, name)`;
+    // Partage : jeton secret du lien d'invitation en lecture seule (null = pas de lien actif)
+    await sql`alter table trips add column if not exists share_token text unique`;
   })().catch(e => { ready = null; throw e; });
 }
 

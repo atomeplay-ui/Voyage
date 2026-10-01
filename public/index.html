@@ -92,6 +92,21 @@
   .account span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); cursor: pointer; }
   .account button { padding: 8px 12px; border-radius: 999px; background: var(--glass-press); font-weight: 600; white-space: nowrap; }
 
+  /* Partage : bandeau de la vue invitée et fenêtre du lien d'invitation */
+  .shared-by { margin: 0 0 12px; text-align: center; font-size: 13px; color: var(--muted); }
+  #shareDlg { width: min(360px, calc(100vw - 32px)); padding: 22px; border: 1px solid var(--surface-line); border-radius: 28px;
+    background: var(--surface); color: var(--text); box-shadow: 0 24px 70px rgba(0,0,0,.35); text-align: center; }
+  #shareDlg::backdrop { background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  #shareDlg h3 { margin: 0 0 8px; font-size: 19px; }
+  #shareDlg h3 i { color: var(--accent); }
+  #shareDlg p { margin: 0 0 14px; font-size: 14px; color: var(--muted); }
+  #shareDlg input { width: 100%; height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--surface-line); background: rgba(127,127,127,.1); font-size: 13px; outline: none; }
+  #shareDlg button { width: 100%; height: 44px; margin-top: 10px; border-radius: 12px; font-weight: 600; background: rgba(127,127,127,.14); }
+  #shareDlg .dlg-row { display: flex; gap: 8px; }
+  #shareDlg #shareCopy { background: var(--accent); color: #fff; }
+  #shareDlg #shareOff { color: var(--danger); }
+  #shareDlg #shareClose { background: none; color: var(--muted); }
+
   /* Écran de connexion (rien d'autre n'est visible tant qu'on n'est pas connecté) */
   body.logged-out #drawer, body.logged-out #backdrop, body.logged-out #actions, body.logged-out .top .icon { display: none; }
   .login { max-width: 360px; margin: 6vh auto 0; padding: 28px 22px; border-radius: 30px; text-align: center;
@@ -357,6 +372,7 @@
 <header class="top lg">
   <button class="icon" id="menuBtn" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
   <h1 id="title">Mes voyages</h1>
+  <button class="icon" id="shareTrip" aria-label="Partager le voyage" hidden><i class="fa-solid fa-share-nodes"></i></button>
   <button class="icon" id="delTrip" aria-label="Supprimer le voyage" hidden><i class="fa-solid fa-trash-can"></i></button>
 </header>
 
@@ -375,6 +391,15 @@
   <button id="rec"><i class="fa-solid fa-microphone"></i><b>Audio</b></button>
 </footer>
 <div id="toast" hidden></div>
+
+<dialog id="shareDlg">
+  <h3><i class="fa-solid fa-share-nodes"></i> Partager ce voyage</h3>
+  <p>Toute personne qui a ce lien peut <b>voir</b> le voyage, sans compte. Elle ne peut rien ajouter, modifier ni supprimer.</p>
+  <input id="shareLink" readonly aria-label="Lien d’invitation">
+  <div class="dlg-row"><button id="shareCopy">Copier le lien</button><button id="shareSend">Envoyer…</button></div>
+  <button id="shareOff">Désactiver le lien</button>
+  <button id="shareClose">Fermer</button>
+</dialog>
 
 <div id="viewer" hidden>
   <div id="viewerTrack"></div>
@@ -524,7 +549,8 @@ function enterApp() {
 
 async function boot() {
   me = await loadSession();
-  if (!me) return showLogin();
+  // Sans compte : écran de connexion, sauf pour un lien d'invitation (route() s'en charge)
+  if (!me) { document.body.classList.add('logged-out'); return route(); }
   if (nameMissing(me)) return showProfile();
   enterApp();
 }
@@ -978,12 +1004,14 @@ async function showHome() {
   showMap();
 }
 
-function showTrip(trip) {
-  main.innerHTML = `<div class="tabs" id="tabs"><button data-tab="wall" class="on">Souvenirs</button><button data-tab="map">Carte</button></div>
-    <section id="wall"><form id="note"><textarea name="text" rows="1" placeholder="Écrire une note…"></textarea><button>Ajouter</button></form>
+// Page d'un voyage : onglets Souvenirs / Carte. readonly = vue partagée (pas de champ de note)
+function tripPage(readonly) {
+  main.innerHTML = `${readonly ? '<p class="shared-by" id="sharedBy"></p>' : ''}
+    <div class="tabs" id="tabs"><button data-tab="wall" class="on">Souvenirs</button><button data-tab="map">Carte</button></div>
+    <section id="wall">${readonly ? '' : '<form id="note"><textarea name="text" rows="1" placeholder="Écrire une note…"></textarea><button>Ajouter</button></form>'}
     <div class="grid" id="items"></div></section>
     <section id="mapTab" hidden><div id="map"></div>${SHEET_HTML}
-    <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.<br>Les photos, vidéos, audios et notes pris dans l’appli seront placés ici.</p></section>`;
+    <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.${readonly ? '' : '<br>Les photos, vidéos, audios et notes pris dans l’appli seront placés ici.'}</p></section>`;
   $('#tabs').onclick = e => {
     const tab = e.target.dataset.tab;
     if (!tab) return;
@@ -992,6 +1020,27 @@ function showTrip(trip) {
     $('#mapTab').hidden = tab !== 'map';
     showMap();
   };
+}
+
+// Voyage ouvert par un lien d'invitation : lecture seule, sans compte
+async function showShared(token) {
+  $('#delTrip').hidden = $('#shareTrip').hidden = $('#actions').hidden = true;
+  const r = await fetch('/api/trips?token=' + encodeURIComponent(token));
+  if (location.hash !== '#share=' + encodeURIComponent(token)) return;
+  if (!r.ok) {
+    $('#title').textContent = 'Mes voyages';
+    main.innerHTML = '<p class="empty">Ce lien de partage n’est plus valide.<br>Demandez un nouveau lien à la personne qui vous l’a envoyé.</p>';
+    return;
+  }
+  const { name, owner, media } = await r.json();
+  $('#title').textContent = name;
+  tripPage(true);
+  $('#sharedBy').innerHTML = `<i class="fa-solid fa-eye"></i> Voyage partagé${owner ? ' par ' + esc(owner) : ''} · lecture seule`;
+  renderItems(media, true);
+}
+
+function showTrip(trip) {
+  tripPage(false);
   $('#note').onsubmit = e => {
     e.preventDefault();
     const text = e.target.text.value.trim();
@@ -1303,9 +1352,14 @@ addEventListener('keydown', e => {
 
 async function loadItems(trip) {
   const rows = await api(`/api/trips?trip=${encodeURIComponent(trip)}`); // du plus récent au plus ancien
+  if (currentTrip() === trip) renderItems(rows, false);
+}
+
+// Affiche les souvenirs d'un voyage. readonly = vue partagée : aucun bouton de suppression.
+function renderItems(rows, readonly) {
   const box = $('#items');
-  if (!box || currentTrip() !== trip) return;
-  box.innerHTML = rows.length ? '' : '<p class="empty">Ce voyage est vide.<br>Ajoutez une photo, une vidéo, un audio ou une note.</p>';
+  if (!box) return;
+  box.innerHTML = rows.length ? '' : `<p class="empty">Ce voyage est vide.${readonly ? '' : '<br>Ajoutez une photo, une vidéo, un audio ou une note.'}</p>`;
   const media = []; // dans l'ordre d'affichage, pour la visionneuse et la carte
   for (const row of rows) {
     const m = toMedia(row), { kind, date, src } = m;
@@ -1338,15 +1392,17 @@ async function loadItems(trip) {
       // Le rond lit l'audio sur place ; toucher la durée l'ouvre dans la visionneuse
       el.querySelector('.len').onclick = () => openViewer(media, i);
     }
-    const del = document.createElement('button');
-    del.className = 'del'; del.innerHTML = '<i class="fa-solid fa-xmark"></i>'; del.setAttribute('aria-label', 'Supprimer');
-    del.onclick = async () => {
-      if (!confirm('Supprimer ce média ?')) return;
-      await api(`/api/media?id=${row.id}`, { method: 'DELETE' });
-      el.remove();
-      tripMedia = tripMedia.filter(x => x.id !== row.id); // retire aussi le point de la carte
-    };
-    el.append(del);
+    if (!readonly) {
+      const del = document.createElement('button');
+      del.className = 'del'; del.innerHTML = '<i class="fa-solid fa-xmark"></i>'; del.setAttribute('aria-label', 'Supprimer');
+      del.onclick = async () => {
+        if (!confirm('Supprimer ce média ?')) return;
+        await api(`/api/media?id=${row.id}`, { method: 'DELETE' });
+        el.remove();
+        tripMedia = tripMedia.filter(x => x.id !== row.id); // retire aussi le point de la carte
+      };
+      el.append(del);
+    }
     box.append(el);
   }
   tripMedia = media;
@@ -1383,17 +1439,44 @@ addEventListener('scroll', () => {
 }, { passive: true });
 
 function route() {
-  if (!me) return;
-  const trip = currentTrip();
   document.body.classList.remove('bar-min');
-  $('#title').textContent = trip || 'Mes voyages';
-  $('#delTrip').hidden = $('#actions').hidden = !trip;
-  loadTrips();
   setMenu(false);
+  // Lien d'invitation (#share=…) : visible avec ou sans compte
+  const share = location.hash.match(/^#share=(.+)/)?.[1];
+  if (share) {
+    if (me) loadTrips();
+    return showShared(decodeURIComponent(share));
+  }
+  if (!me) return showLogin();
+  const trip = currentTrip();
+  $('#title').textContent = trip || 'Mes voyages';
+  $('#delTrip').hidden = $('#shareTrip').hidden = $('#actions').hidden = !trip;
+  loadTrips();
   if (trip) return showTrip(trip);
   showHome();
 }
 addEventListener('hashchange', route);
+
+// Partage : le propriétaire crée un lien d'invitation en lecture seule, qu'il peut copier, envoyer ou désactiver
+const shareDlg = $('#shareDlg');
+$('#shareTrip').onclick = async () => {
+  const { token } = await api(`/api/trips?share=1&trip=${encodeURIComponent(currentTrip())}`, { method: 'POST' });
+  $('#shareLink').value = `${location.origin}/#share=${encodeURIComponent(token)}`;
+  $('#shareSend').hidden = !navigator.share;
+  $('#shareCopy').textContent = 'Copier le lien';
+  shareDlg.showModal();
+};
+$('#shareCopy').onclick = async () => {
+  await navigator.clipboard.writeText($('#shareLink').value);
+  $('#shareCopy').textContent = 'Lien copié ✓';
+};
+$('#shareSend').onclick = () => navigator.share({ title: currentTrip(), text: `Regarde mon voyage « ${currentTrip()} »`, url: $('#shareLink').value }).catch(() => {});
+$('#shareOff').onclick = async () => {
+  if (!confirm('Désactiver ce lien ? Les personnes qui l’ont reçu ne pourront plus voir le voyage.')) return;
+  await api(`/api/trips?share=1&trip=${encodeURIComponent(currentTrip())}`, { method: 'DELETE' });
+  shareDlg.close();
+};
+$('#shareClose').onclick = () => shareDlg.close();
 $('#logout').onclick = async () => { await authCall('sign-out', {}); location.reload(); };
 $('#who').onclick = showProfile; // toucher son nom dans le menu permet de le modifier
 boot();
