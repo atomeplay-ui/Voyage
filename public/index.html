@@ -89,7 +89,7 @@
   .empty-list { color: var(--muted); padding: 12px; }
   /* Compte, en bas du menu */
   .account { display: flex; align-items: center; gap: 8px; padding: 12px 6px 0; border-top: 1px solid var(--glass-border); font-size: 13px; }
-  .account span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .account span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); cursor: pointer; }
   .account button { padding: 8px 12px; border-radius: 999px; background: var(--glass-press); font-weight: 600; white-space: nowrap; }
 
   /* Écran de connexion (rien d'autre n'est visible tant qu'on n'est pas connecté) */
@@ -127,8 +127,9 @@
     isolation: isolate; border: 1px solid var(--surface-line); box-shadow: var(--card-shadow); background: var(--surface); }
   .map-empty { text-align: center; color: var(--muted); font-size: 14px; margin: 12px 20px 0; }
   /* Accueil : carte de tous les voyages, plus haute (pas d'onglets ni de champ de note) */
-  .home-title { margin: 4px 6px 12px; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
-  .home-map #map { height: calc(100dvh - 190px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .home-title { margin: 4px 6px 2px; font-size: 26px; font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .home-sub { margin: 0 6px 12px; color: var(--muted); font-size: 14px; }
+  .home-map #map { height: calc(100dvh - 215px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
   .sheet-head #sheetOpen { margin-left: auto; margin-right: 8px; padding: 6px 12px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; }
   .sheet-head b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Point sur la carte : miniatures façon Polaroid empilées en éventail, avec une pointe et le nombre de médias */
@@ -432,7 +433,8 @@ const authCall = async (path, body) => {
 // Au retour de Google, l'adresse contient un code de vérification à échanger contre la session
 async function loadSession() {
   const verifier = new URLSearchParams(location.search).get('neon_auth_session_verifier');
-  const { data } = await authCall('get-session' + (verifier ? `?neon_auth_session_verifier=${encodeURIComponent(verifier)}` : ''));
+  // disableCookieCache : toujours le profil à jour (le nom vient d'être modifié, par exemple)
+  const { data } = await authCall('get-session?disableCookieCache=true' + (verifier ? `&neon_auth_session_verifier=${encodeURIComponent(verifier)}` : ''));
   if (verifier) history.replaceState(null, '', location.pathname + location.hash);
   return data?.user || null;
 }
@@ -483,12 +485,48 @@ function showLogin(signup = false) {
   };
 }
 
+// Prénom et nom : demandés après la création du compte (à l'inscription par e-mail, le nom vaut d'abord
+// le début de l'adresse : c'est le signe qu'il reste à renseigner). Modifiables ensuite depuis le menu.
+const nameMissing = u => !u.name?.trim() || u.name === u.email?.split('@')[0];
+function showProfile() {
+  document.body.classList.add('logged-out');
+  setMenu(false);
+  const [first = '', ...rest] = nameMissing(me) ? [] : me.name.trim().split(' ');
+  main.innerHTML = `<section class="login">
+    <i class="fa-solid fa-user"></i>
+    <h2>Bienvenue !</h2>
+    <p>Comment vous appelez-vous ?</p>
+    <form id="profileForm">
+      <input name="first" autocomplete="given-name" placeholder="Prénom" value="${esc(first)}" required>
+      <input name="last" autocomplete="family-name" placeholder="Nom" value="${esc(rest.join(' '))}" required>
+      <button>Continuer</button>
+    </form>
+    <p class="login-err" id="loginErr" role="alert"></p>
+    ${nameMissing(me) ? '' : '<button class="link" id="profileCancel">Annuler</button>'}
+  </section>`;
+  if ($('#profileCancel')) $('#profileCancel').onclick = enterApp;
+  $('#profileForm').onsubmit = async e => {
+    e.preventDefault();
+    const name = `${e.target.first.value.trim()} ${e.target.last.value.trim()}`;
+    const { ok, data } = await authCall('update-user', { name });
+    if (!ok) { $('#loginErr').textContent = data?.message || 'Enregistrement impossible. Réessayez.'; return; }
+    me.name = name;
+    enterApp();
+  };
+}
+
+function enterApp() {
+  document.body.classList.remove('logged-out');
+  $('#who').textContent = me.name;
+  $('#who').title = me.email || '';
+  route();
+}
+
 async function boot() {
   me = await loadSession();
   if (!me) return showLogin();
-  document.body.classList.remove('logged-out');
-  $('#who').textContent = me.email || me.name || '';
-  route();
+  if (nameMissing(me)) return showProfile();
+  enterApp();
 }
 
 // Menu
@@ -931,7 +969,8 @@ const toMedia = r => ({ id: r.id, kind: r.kind, src: r.src, text: r.text || '', 
 
 // Accueil : la carte de tous les voyages
 async function showHome() {
-  main.innerHTML = `<section id="mapTab" class="home-map"><h2 class="home-title">Tous mes voyages</h2><div id="map"></div>${SHEET_HTML}
+  main.innerHTML = `<section id="mapTab" class="home-map"><h2 class="home-title">Bonjour ${esc(me.name)}</h2>
+    <p class="home-sub">Tous vos voyages sur la carte</p><div id="map"></div>${SHEET_HTML}
     <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.<br>Ouvrez le menu <i class="fa-solid fa-bars"></i> pour créer un voyage.</p></section>`;
   const rows = await api('/api/trips?all=1');
   if (currentTrip()) return;
@@ -1356,6 +1395,7 @@ function route() {
 }
 addEventListener('hashchange', route);
 $('#logout').onclick = async () => { await authCall('sign-out', {}); location.reload(); };
+$('#who').onclick = showProfile; // toucher son nom dans le menu permet de le modifier
 boot();
 </script>
 </body>
