@@ -111,11 +111,20 @@
 
   /* Partage : bandeau de la vue invitée et fenêtre du lien d'invitation */
   .shared-by { margin: 0 0 12px; text-align: center; font-size: 13px; color: var(--muted); }
-  #shareDlg { width: min(360px, calc(100vw - 32px)); padding: 22px; border: 1px solid var(--surface-line); border-radius: 28px;
+  dialog { width: min(360px, calc(100vw - 32px)); padding: 22px; border: 1px solid var(--surface-line); border-radius: 28px;
     background: var(--surface); color: var(--text); box-shadow: 0 24px 70px rgba(0,0,0,.35); text-align: center; }
-  #shareDlg::backdrop { background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-  #shareDlg h3 { margin: 0 0 8px; font-size: 19px; }
-  #shareDlg h3 i { color: var(--accent); }
+  dialog::backdrop { background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  dialog h3 { margin: 0 0 12px; font-size: 19px; }
+  dialog h3 i { color: var(--accent); }
+  /* Modifier le voyage : mêmes champs que la création (nom + icône) */
+  #editForm { display: grid; gap: 12px; }
+  #editForm input[name=name] { height: 46px; padding: 0 14px; border-radius: 14px; outline: none; background: rgba(127,127,127,.1); border: 1px solid var(--surface-line); }
+  #editForm input[name=name]:focus { border-color: var(--accent); }
+  #editErr { margin: 0; min-height: 0; color: var(--danger); font-size: 14px; }
+  #editErr:empty { display: none; }
+  /* Titre du voyage : un crayon indique qu'on peut le toucher pour le modifier (propriétaire) */
+  #title.editable { cursor: pointer; }
+  #title.editable::after { content: '\f304'; font: var(--fa-font-solid); font-size: 11px; margin-left: 7px; opacity: .55; vertical-align: 1px; }
   #shareDlg p { margin: 0 0 14px; font-size: 14px; color: var(--muted); }
   #shareDlg input { width: 100%; height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--surface-line); background: rgba(127,127,127,.1); font-size: 13px; outline: none; }
   #shareDlg button { width: 100%; height: 44px; margin-top: 10px; border-radius: 12px; font-weight: 600; background: rgba(127,127,127,.14); }
@@ -189,11 +198,31 @@
   .trip-card .badge { position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px); padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgba(0,0,0,.4); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
   .trip-card .info b i { font-size: 15px; margin-right: 4px; opacity: .9; }
-  /* Derniers souvenirs : bande de miniatures, avec le nom du voyage sous chacune */
-  .recent { margin: 0 -10px; padding: 2px 10px 6px; }
-  .recent .sheet-item { flex-basis: 104px; height: 104px; }
-  .sheet-item .cap { position: absolute; inset: auto 0 0 0; padding: 14px 6px 5px; font-size: 10.5px; font-weight: 600; color: #fff; text-align: left;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: linear-gradient(transparent, rgba(0,0,0,.65)); }
+  /* Derniers souvenirs : cartes dans le style des cartes de voyage, une présentation par type, le voyage en bas */
+  .recent { display: flex; gap: 10px; margin: 0 -10px; padding: 2px 10px 12px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 10px; scrollbar-width: none; }
+  .recent::-webkit-scrollbar { display: none; }
+  .mem { position: relative; flex: 0 0 132px; height: 168px; border-radius: 22px; overflow: hidden; scroll-snap-align: start; text-align: left; color: var(--text);
+    background: var(--surface); border: 1px solid var(--surface-line); box-shadow: 0 6px 18px rgba(20,30,60,.1); transition: transform .2s cubic-bezier(.3,1.4,.5,1); }
+  .mem:active { transform: scale(.96); }
+  .mem img, .mem video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .mem .cap { position: absolute; inset: auto 0 0 0; padding: 8px 12px 10px; font-size: 11.5px; font-weight: 600; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mem .cap i { font-size: 10.5px; margin-right: 3px; color: hsl(var(--hue) 70% 50%); }
+  /* Photo et vidéo : image pleine carte, légende blanche sur dégradé (comme les cartes de voyage) */
+  .mem.img .cap, .mem.vid .cap { padding-top: 26px; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+  .mem.img .cap i, .mem.vid .cap i { color: #fff; }
+  /* Note : guillemet et texte lisible, coupé proprement */
+  .mem.note { padding: 14px 13px 34px; }
+  .mem.note > i { color: var(--accent); font-size: 15px; opacity: .85; }
+  .mem.note p { margin: 6px 0 0; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+  /* Audio : rond de lecture (comme dans le voyage) sur un fond légèrement teinté */
+  .mem.aud { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding-bottom: 26px;
+    background: linear-gradient(165deg, color-mix(in srgb, var(--accent) 14%, var(--surface)), var(--surface) 70%); }
+  .mem-ring { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; color: var(--accent); font-size: 18px; background: var(--surface);
+    border: 4px solid color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: 0 4px 12px rgba(0,122,255,.18); }
+  .mem-ring i { margin-left: 3px; }
+  .mem-kind { font-size: 12px; font-weight: 600; color: var(--muted); }
   .trip-card.new { flex-basis: min(42vw, 170px); background: var(--surface); color: var(--accent); border: 2px dashed var(--surface-line); box-shadow: none; }
   .trip-card.new .info { background: none; color: var(--text); text-align: center; }
   .trip-card.new .info b { font-size: 15px; }
@@ -454,6 +483,16 @@
   <button id="rec"><i class="fa-solid fa-microphone"></i><b>Audio</b></button>
 </footer>
 <div id="toast" hidden></div>
+
+<dialog id="editDlg">
+  <h3><i class="fa-solid fa-pen"></i> Modifier le voyage</h3>
+  <form id="editForm">
+    <input name="name" placeholder="Nom du voyage" required maxlength="60" aria-label="Nom du voyage">
+    <div class="icon-pick" id="editIcons" role="radiogroup" aria-label="Icône du voyage"></div>
+    <p class="login-err" id="editErr" role="alert"></p>
+    <div class="new-actions"><button type="button" id="editCancel">Annuler</button><button class="primary">Enregistrer</button></div>
+  </form>
+</dialog>
 
 <dialog id="shareDlg">
   <h3><i class="fa-solid fa-share-nodes"></i> Partager ce voyage</h3>
@@ -1109,11 +1148,21 @@ function tripCard(t) {
 }
 
 // Bande de miniatures (aperçu d'un lieu sur la carte, derniers souvenirs) : un appui ouvre la visionneuse sur ces médias
-function fillStrip(box, items, caption) {
-  box.innerHTML = items.map((m, i) => `<button class="sheet-item ${m.kind}" data-i="${i}">${m.kind === 'vid'
-    ? `<video src="${m.src}#t=0.1" muted playsinline preload="metadata"></video><i class="fa-solid fa-play badge"></i>` : thumbHTML(m)}${
-    caption ? `<small class="cap">${esc(m.trip || '')}</small>` : ''}</button>`).join('');
+function fillStrip(box, items, html = (m, i) => `<button class="sheet-item ${m.kind}" data-i="${i}">${m.kind === 'vid'
+  ? `<video src="${m.src}#t=0.1" muted playsinline preload="metadata"></video><i class="fa-solid fa-play badge"></i>` : thumbHTML(m)}</button>`) {
+  box.innerHTML = items.map(html).join('');
   box.onclick = e => { const b = e.target.closest('[data-i]'); if (b) openViewer(items, +b.dataset.i); };
+}
+
+// Carte d'un « dernier souvenir » : une présentation par type (photo, vidéo, note, audio), avec le voyage en bas
+function memoryCard(m, i) {
+  const t = trips.find(t => t.id === m.tripId);
+  const body = m.kind === 'img' ? `<img src="${m.src}" loading="lazy" alt="">`
+    : m.kind === 'vid' ? `<video src="${m.src}#t=0.1" muted playsinline preload="metadata"></video><span class="play-badge"><i class="fa-solid fa-play"></i></span>`
+    : m.kind === 'note' ? `<i class="fa-solid fa-quote-left"></i><p>${esc(m.text)}</p>`
+    : `<span class="mem-ring"><i class="fa-solid fa-play"></i></span><span class="mem-kind"><i class="fa-solid fa-microphone"></i> Audio</span>`;
+  return `<button class="mem ${m.kind}" data-i="${i}" style="--hue:${t ? tripHue(t) : 211}">${body}
+    <small class="cap"><i class="fa-solid ${t ? tripIcon(t) : 'fa-suitcase-rolling'}"></i> ${esc(m.trip || '')}</small></button>`;
 }
 async function showHome() {
   const total = trips.reduce((n, t) => n + t.count, 0);
@@ -1122,7 +1171,7 @@ async function showHome() {
     <p class="home-stats">${plural(trips.length, 'voyage')} · ${plural(total, 'souvenir')}<span id="places"></span></p>
     <div class="trip-cards">${trips.map(tripCard).join('')}
       <button class="trip-card new" id="newCard"><i class="fa-solid fa-plus"></i><span class="info"><b>Nouveau voyage</b></span></button></div>
-    <div id="recentBox" hidden><h3 class="home-h">Derniers souvenirs</h3><div class="sheet-strip recent" id="recent"></div></div>
+    <div id="recentBox" hidden><h3 class="home-h">Derniers souvenirs</h3><div class="recent" id="recent"></div></div>
     <h3 class="home-h">Sur la carte</h3>
     <div id="mapTab" class="home-map"><div id="map"></div>${SHEET_HTML}
     <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.</p></div></section>`;
@@ -1131,7 +1180,7 @@ async function showHome() {
   if (location.hash.length > 1) return;
   // Derniers souvenirs ajoutés, tous voyages confondus (y compris par les autres participants)
   $('#recentBox').hidden = !recent.length;
-  fillStrip($('#recent'), recent.map(toMedia), true);
+  fillStrip($('#recent'), recent.map(toMedia), memoryCard);
   tripMedia = located.map(toMedia);
   // Lieux : positions distinctes à environ 1 km près
   const places = new Set(tripMedia.map(m => `${m.lat.toFixed(2)},${m.lng.toFixed(2)}`)).size;
@@ -1581,6 +1630,8 @@ async function route() {
   // Lien d'invitation (#share=…) : visible avec ou sans compte
   const share = location.hash.match(/^#share=(.+)/)?.[1];
   if (share) {
+    cur = null; // vue invitée : aucun voyage à moi n'est ouvert (rien à modifier)
+    $('#title').classList.remove('editable');
     if (me) loadTrips();
     return showShared(decodeURIComponent(share));
   }
@@ -1598,6 +1649,7 @@ async function route() {
   if (id && !cur) { location.hash = ''; return; } // voyage inconnu ou retiré : retour à l'accueil
   const owner = cur?.role === 'owner';
   $('#title').textContent = cur?.name || 'Mes voyages';
+  $('#title').classList.toggle('editable', owner);
   $('#actions').hidden = $('#delTrip').hidden = !cur;
   $('#shareTrip').hidden = !owner;
   $('#delTrip').innerHTML = `<i class="fa-solid ${owner ? 'fa-trash-can' : 'fa-right-from-bracket'}"></i>`;
@@ -1606,6 +1658,26 @@ async function route() {
   showHome();
 }
 addEventListener('hashchange', route);
+
+// Modifier le voyage (propriétaire) : toucher le titre ouvre une fenêtre avec le nom et l'icône
+const editDlg = $('#editDlg'), editForm = $('#editForm');
+$('#editIcons').innerHTML = TRIP_ICONS.map(ic => `<label><input type="radio" name="icon" value="${ic}"><i class="fa-solid ${ic}"></i></label>`).join('');
+$('#title').onclick = () => {
+  if (cur?.role !== 'owner') return;
+  editForm.elements.name.value = cur.name;
+  editForm.elements.icon.value = tripIcon(cur);
+  $('#editErr').textContent = '';
+  editDlg.showModal();
+};
+$('#editCancel').onclick = () => editDlg.close();
+editForm.onsubmit = async e => {
+  e.preventDefault();
+  const r = await fetch(`/api/trips?id=${cur.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: editForm.elements.name.value.trim(), icon: editForm.elements.icon.value }) });
+  if (!r.ok) { $('#editErr').textContent = (await r.json().catch(() => null))?.error || 'Enregistrement impossible.'; return; }
+  editDlg.close();
+  route(); // recharge le menu et le titre avec le nouveau nom et la nouvelle icône
+};
 
 // Partage (propriétaire) : deux liens par voyage, à copier, envoyer ou désactiver.
 // share = lecture seule, sans compte ; invite = participer (compte obligatoire, la personne peut ajouter des souvenirs).

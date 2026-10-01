@@ -106,6 +106,18 @@ export default async function handler(req, res) {
     return res.json(await withSrc(await sql`select * from media where trip_id = ${trip.id} order by created_at desc`));
   }
 
+  // Modifier le nom et l'icône du voyage (propriétaire). Les fichiers ne bougent pas : ils sont rangés par numéro de voyage.
+  if (req.method === 'PATCH') {
+    if (!owner) return res.status(403).json({ error: 'Réservé au propriétaire du voyage' });
+    const name = String(req.body?.name || '').trim();
+    if (!name || name.includes('/')) return res.status(400).json({ error: 'Nom invalide' });
+    const icon = /^fa-[a-z-]{2,30}$/.test(req.body?.icon) ? req.body.icon : null;
+    const [clash] = await sql`select 1 from trips where user_id = ${user.id} and name = ${name} and id <> ${trip.id}`;
+    if (clash) return res.status(409).json({ error: 'Vous avez déjà un voyage qui porte ce nom' });
+    await sql`update trips set name = ${name}, icon = ${icon} where id = ${trip.id}`;
+    return res.json({ id: trip.id, name, icon });
+  }
+
   if (req.method === 'DELETE') {
     // Un participant quitte le voyage ; le propriétaire le supprime (avec ses fichiers et ses médias, en cascade)
     if (!owner) {
