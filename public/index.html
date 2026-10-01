@@ -155,9 +155,29 @@
     isolation: isolate; border: 1px solid var(--surface-line); box-shadow: var(--card-shadow); background: var(--surface); }
   .map-empty { text-align: center; color: var(--muted); font-size: 14px; margin: 12px 20px 0; }
   /* Accueil : carte de tous les voyages, plus haute (pas d'onglets ni de champ de note) */
+  /* Accueil : bonjour, chiffres, voyages en cartes illustrées (carrousel), carte compacte */
   .home-title { margin: 4px 6px 2px; font-size: 26px; font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
-  .home-sub { margin: 0 6px 12px; color: var(--muted); font-size: 14px; }
-  .home-map #map { height: calc(100dvh - 215px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .home-stats { margin: 0 6px 14px; color: var(--muted); font-size: 14px; }
+  .home-stats b { color: var(--text); }
+  .home-h { margin: 22px 6px 10px; font-size: 18px; }
+  .trip-cards { display: flex; gap: 12px; margin: 0 -10px; padding: 4px 10px 14px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 10px; scrollbar-width: none; }
+  .trip-cards::-webkit-scrollbar { display: none; }
+  .trip-card { position: relative; flex: 0 0 min(64vw, 250px); aspect-ratio: 4 / 5; border-radius: 26px; overflow: hidden; scroll-snap-align: start;
+    display: grid; place-items: center; color: #fff; text-decoration: none; box-shadow: var(--card-shadow); transition: transform .2s cubic-bezier(.3,1.4,.5,1);
+    background: linear-gradient(160deg, hsl(var(--hue, 210) 70% 58%), hsl(calc(var(--hue, 210) + 50) 70% 42%)); }
+  .trip-card:active { transform: scale(.97); }
+  .trip-card img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .trip-card > i { font-size: 44px; opacity: .85; }
+  .trip-card .info { position: absolute; inset: auto 0 0 0; padding: 40px 16px 14px; text-align: left; display: grid; gap: 1px;
+    background: linear-gradient(transparent, rgba(0,0,0,.72)); }
+  .trip-card .info b { font-size: 20px; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trip-card .info small { font-size: 12.5px; opacity: .88; }
+  .trip-card .badge { position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px); padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgba(0,0,0,.4); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  .trip-card.new { flex-basis: min(42vw, 170px); background: var(--surface); color: var(--accent); border: 2px dashed var(--surface-line); box-shadow: none; }
+  .trip-card.new .info { background: none; color: var(--text); text-align: center; }
+  .trip-card.new .info b { font-size: 15px; }
+  .home-map #map { height: 340px; min-height: 0; }
   .sheet-head #sheetOpen { margin-left: auto; margin-right: 8px; padding: 6px 12px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; }
   .sheet-head b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Point sur la carte : miniatures façon Polaroid empilées en éventail, avec une pointe et le nombre de médias */
@@ -1024,14 +1044,35 @@ const fmtDate = d => new Date(d).toLocaleString('fr-FR', { dateStyle: 'short', t
 const toMedia = r => ({ id: r.id, kind: r.kind, src: r.src, text: r.text || '', date: fmtDate(r.created_at), trip: r.trip, tripId: r.trip_id,
   ...(r.lat !== null ? { lat: r.lat, lng: r.lng } : {}) });
 
-// Accueil : la carte de tous les voyages
+// Accueil : bonjour, quelques chiffres, les voyages en cartes illustrées, puis la carte de tous les souvenirs
+const fmtDays = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+const plural = (n, word) => `<b>${n}</b> ${word}${n > 1 ? 's' : ''}`;
+function tripCard(t) {
+  const dates = t.firstAt ? fmtDays.formatRange(new Date(t.firstAt), new Date(t.lastAt)) : 'Pas encore de souvenir';
+  // Sans photo : un dégradé dont la teinte dépend du nom du voyage (toujours la même pour un voyage)
+  const hue = Math.round(rand(t.name, 'hue') * 360);
+  return `<a class="trip-card" href="#${t.id}" style="--hue:${hue}">
+    ${t.cover ? `<img src="${t.cover}" loading="lazy" alt="">` : '<i class="fa-solid fa-suitcase-rolling"></i>'}
+    ${t.role === 'member' ? `<span class="badge"><i class="fa-solid fa-user-group"></i> ${t.owner ? esc(t.owner) : 'Partagé'}</span>` : ''}
+    <span class="info"><b>${esc(t.name)}</b><small>${dates}</small><small>${t.count} souvenir${t.count > 1 ? 's' : ''}</small></span></a>`;
+}
 async function showHome() {
-  main.innerHTML = `<section id="mapTab" class="home-map"><h2 class="home-title">Bonjour ${esc(me.name)}</h2>
-    <p class="home-sub">Tous vos voyages sur la carte</p><div id="map"></div>${SHEET_HTML}
-    <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.<br>Ouvrez le menu <i class="fa-solid fa-bars"></i> pour créer un voyage.</p></section>`;
+  const total = trips.reduce((n, t) => n + t.count, 0);
+  main.innerHTML = `<section class="home">
+    <h2 class="home-title">Bonjour ${esc(me.name)}</h2>
+    <p class="home-stats">${plural(trips.length, 'voyage')} · ${plural(total, 'souvenir')}<span id="places"></span></p>
+    <div class="trip-cards">${trips.map(tripCard).join('')}
+      <button class="trip-card new" id="newCard"><i class="fa-solid fa-plus"></i><span class="info"><b>Nouveau voyage</b></span></button></div>
+    <h3 class="home-h">Sur la carte</h3>
+    <div id="mapTab" class="home-map"><div id="map"></div>${SHEET_HTML}
+    <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.</p></div></section>`;
+  $('#newCard').onclick = () => { setMenu(true); $('#new input').focus(); };
   const rows = await api('/api/trips?all=1');
   if (location.hash.length > 1) return;
   tripMedia = rows.map(toMedia);
+  // Lieux : positions distinctes à environ 1 km près
+  const places = new Set(tripMedia.map(m => `${m.lat.toFixed(2)},${m.lng.toFixed(2)}`)).size;
+  if (places) $('#places').innerHTML = ` · ${plural(places, 'lieu').replace('lieus', 'lieux')}`;
   showMap();
 }
 

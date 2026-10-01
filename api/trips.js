@@ -39,12 +39,19 @@ export default async function handler(req, res) {
       order by m.created_at desc`));
     // ponytail: les voyages créés avant l'ajout des comptes (sans propriétaire) vont au premier compte qui se connecte
     await sql`update trips set user_id = ${user.id} where user_id is null`;
-    const trips = await sql`
-      select t.id, t.name, t.user_id, case when t.user_id = ${user.id} then 'owner' else 'member' end as role from trips t
+    // Pour les cartes de l'accueil : nombre de souvenirs, dates du premier et du dernier, et dernière photo en couverture
+    const trips = await withSrc(await sql`
+      select t.id, t.name, t.user_id, case when t.user_id = ${user.id} then 'owner' else 'member' end as role,
+        (select count(*)::int from media m where m.trip_id = t.id) as count,
+        (select min(m.created_at) from media m where m.trip_id = t.id) as first_at,
+        (select max(m.created_at) from media m where m.trip_id = t.id) as last_at,
+        (select m.pathname from media m where m.trip_id = t.id and m.kind = 'img' order by m.created_at desc limit 1) as pathname
+      from trips t
       where t.user_id = ${user.id} or exists (select 1 from trip_members x where x.trip_id = t.id and x.user_id = ${user.id})
-      order by t.created_at`;
+      order by t.created_at`);
     const names = await namesOf([...new Set(trips.filter(t => t.role === 'member').map(t => t.user_id))]);
-    return res.json(trips.map(t => ({ id: t.id, name: t.name, role: t.role, owner: names[t.user_id] ?? null })));
+    return res.json(trips.map(t => ({ id: t.id, name: t.name, role: t.role, owner: names[t.user_id] ?? null,
+      count: t.count, firstAt: t.first_at, lastAt: t.last_at, cover: t.src ?? null })));
   }
 
   if (req.method === 'POST' && !id) {
