@@ -676,6 +676,18 @@ async function boot() {
 const setMenu = open => { document.body.classList.toggle('menu-open', open); };
 $('#menuBtn').onclick = () => setMenu(true);
 $('#backdrop').onclick = () => setMenu(false);
+// Glisser depuis le bord gauche ouvre le menu ; glisser vers la gauche le referme (hors caméra, visionneuse, fenêtres)
+let edge = null;
+addEventListener('touchstart', e => {
+  const t = e.touches[0], open = document.body.classList.contains('menu-open');
+  edge = e.touches.length === 1 && (open || t.clientX < 28) && !e.target.closest('#cam, #viewer, dialog') ? { x: t.clientX, y: t.clientY, open } : null;
+}, { passive: true });
+addEventListener('touchend', e => {
+  if (!edge) return;
+  const t = e.changedTouches[0], dx = t.clientX - edge.x;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(t.clientY - edge.y) * 1.5 && dx > 0 !== edge.open) setMenu(!edge.open);
+  edge = null;
+}, { passive: true });
 
 // Icônes proposées à la création d'un voyage (la première est celle par défaut)
 const TRIP_ICONS = ['fa-suitcase-rolling', 'fa-plane', 'fa-umbrella-beach', 'fa-mountain-sun', 'fa-city', 'fa-tree',
