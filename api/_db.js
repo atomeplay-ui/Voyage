@@ -3,6 +3,8 @@ import { neon } from '@neondatabase/serverless';
 import { issueSignedToken, presignUrl } from '@vercel/blob';
 
 export const sql = neon(process.env.DATABASE_URL);
+// Service de connexion Neon Auth (variable ajoutée par l'intégration Neon, préfixe DATABASE_)
+export const AUTH_URL = process.env.DATABASE_NEON_AUTH_BASE_URL;
 
 // Crée les tables au premier appel (une fois par démarrage de fonction)
 let ready;
