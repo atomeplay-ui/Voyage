@@ -1054,7 +1054,7 @@ function tripCard(t) {
   return `<a class="trip-card" href="#${t.id}" style="--hue:${hue}">
     ${t.cover ? `<img src="${t.cover}" loading="lazy" alt="">` : '<i class="fa-solid fa-suitcase-rolling"></i>'}
     ${t.role === 'member' ? `<span class="badge"><i class="fa-solid fa-user-group"></i> ${t.owner ? esc(t.owner) : 'Partagé'}</span>` : ''}
-    <span class="info"><b>${esc(t.name)}</b><small>${dates}</small><small>${t.count} souvenir${t.count > 1 ? 's' : ''}</small></span></a>`;
+    <span class="info"><b>${esc(t.name)}</b><small>${dates}</small>${t.count ? `<small>${t.count} souvenir${t.count > 1 ? 's' : ''}</small>` : ''}</span></a>`;
 }
 async function showHome() {
   const total = trips.reduce((n, t) => n + t.count, 0);
