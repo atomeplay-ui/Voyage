@@ -31,6 +31,14 @@ export function schema() {
     await sql`create unique index if not exists trips_user_name on trips (user_id, name)`;
     // Partage : jeton secret du lien d'invitation en lecture seule (null = pas de lien actif)
     await sql`alter table trips add column if not exists share_token text unique`;
+    // Collaboration : lien d'invitation à participer (compte obligatoire), participants, et auteur de chaque média
+    await sql`alter table trips add column if not exists invite_token text unique`;
+    await sql`create table if not exists trip_members (
+      trip_id int not null references trips(id) on delete cascade,
+      user_id text not null,
+      created_at timestamptz not null default now(),
+      primary key (trip_id, user_id))`;
+    await sql`alter table media add column if not exists user_id text`;
   })().catch(e => { ready = null; throw e; });
 }
 
@@ -64,6 +72,22 @@ export async function withSrc(rows) {
   const token = await issueSignedToken({ pathname: '*', operations: ['get'] });
   for (const r of rows) if (r.pathname) r.src = (await presignUrl(token, { operation: 'get', pathname: r.pathname, access: 'private' })).presignedUrl;
   return rows;
+}
+
+// Voyage auquel l'utilisateur a accès, avec son rôle : 'owner' (propriétaire) ou 'member' (participant invité). Sinon null.
+export async function tripFor(user, id) {
+  const [t] = await sql`
+    select t.*, case when t.user_id = ${user.id} then 'owner' else 'member' end as role from trips t
+    where t.id = ${num(id)} and (t.user_id = ${user.id}
+      or exists (select 1 from trip_members m where m.trip_id = t.id and m.user_id = ${user.id}))`;
+  return t || null;
+}
+
+// Noms des comptes (table Neon Auth) : { identifiant: nom }. Facultatif : objet vide si la table n'est pas lisible.
+export async function namesOf(ids) {
+  if (!ids.length) return {};
+  const rows = await sql`select id::text as id, name from neon_auth."user" where id::text = any(${ids})`.catch(() => []);
+  return Object.fromEntries(rows.map(r => [r.id, r.name]));
 }
 
 // Nombre valide ou null (coordonnées envoyées par le navigateur)

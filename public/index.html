@@ -106,6 +106,19 @@
   #shareDlg #shareCopy { background: var(--accent); color: #fff; }
   #shareDlg #shareOff { color: var(--danger); }
   #shareDlg #shareClose { background: none; color: var(--muted); }
+  #shareDlg .tabs { margin: 0 auto 12px; box-shadow: none; background: rgba(127,127,127,.14); border: 0; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  #shareDlg .tabs button { width: auto; height: auto; margin: 0; background: none; padding: 7px 16px; }
+  #shareDlg .tabs button.on { background: var(--surface); }
+  #memberBox { margin-top: 14px; text-align: left; }
+  #memberBox h4 { margin: 0 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  #memberList { list-style: none; margin: 0; padding: 0; max-height: 132px; overflow-y: auto; }
+  #memberList li { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 14px; }
+  #memberList li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #memberList li.none { color: var(--muted); font-size: 13px; }
+  #shareDlg #memberList button { width: auto; height: 32px; margin: 0; padding: 0 12px; font-size: 13px; color: var(--danger); }
+  /* Voyages partagés dans le menu : nom du propriétaire sous le nom du voyage */
+  #tripList a span { min-width: 0; }
+  #tripList a small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
 
   /* Écran de connexion (rien d'autre n'est visible tant qu'on n'est pas connecté) */
   body.logged-out #drawer, body.logged-out #backdrop, body.logged-out #actions, body.logged-out .top .icon { display: none; }
@@ -394,10 +407,12 @@
 
 <dialog id="shareDlg">
   <h3><i class="fa-solid fa-share-nodes"></i> Partager ce voyage</h3>
-  <p>Toute personne qui a ce lien peut <b>voir</b> le voyage, sans compte. Elle ne peut rien ajouter, modifier ni supprimer.</p>
+  <div class="tabs" id="shareTabs"><button data-kind="share" class="on">Lecture seule</button><button data-kind="invite">Participer</button></div>
+  <p id="shareHelp"></p>
   <input id="shareLink" readonly aria-label="Lien d’invitation">
   <div class="dlg-row"><button id="shareCopy">Copier le lien</button><button id="shareSend">Envoyer…</button></div>
-  <button id="shareOff">Désactiver le lien</button>
+  <button id="shareOff">Désactiver ce lien</button>
+  <div id="memberBox" hidden><h4>Participants</h4><ul id="memberList"></ul></div>
   <button id="shareClose">Fermer</button>
 </dialog>
 
@@ -439,7 +454,9 @@ import { uploadPresigned } from 'https://esm.sh/@vercel/blob@2.8.0/client';
 const $ = s => document.querySelector(s);
 const main = $('#main'), toast = $('#toast');
 const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
-const currentTrip = () => decodeURIComponent(location.hash.slice(1));
+// Voyage ouvert : son numéro est dans l'adresse (#12). trips = voyages accessibles, cur = voyage ouvert (avec mon rôle).
+const tripId = () => +(location.hash.match(/^#(\d+)$/)?.[1] ?? 0) || null;
+let trips = [], cur = null;
 
 async function api(path = '/api/trips', opts = {}) {
   const r = await fetch(path, { ...opts, headers: { 'content-type': 'application/json' } });
@@ -481,7 +498,7 @@ function showLogin(signup = false) {
   main.innerHTML = `<section class="login">
     <i class="fa-solid fa-suitcase-rolling"></i>
     <h2>${signup ? 'Créer un compte' : 'Connexion'}</h2>
-    <p>Retrouvez vos voyages et vos souvenirs.</p>
+    <p>${location.hash.startsWith('#join=') ? 'Connectez-vous pour rejoindre le voyage auquel vous êtes invité.' : 'Retrouvez vos voyages et vos souvenirs.'}</p>
     <button class="social" id="google"><i class="fa-brands fa-google"></i> Continuer avec Google</button>
     <div class="or">ou</div>
     <form id="loginForm">
@@ -499,7 +516,10 @@ function showLogin(signup = false) {
   $('#swap').onclick = () => showLogin(!signup);
   $('#google').onclick = async () => {
     const { data } = await authCall('sign-in/social', { provider: 'google', callbackURL: location.origin + '/' });
-    if (data?.url) location.href = data.url; else fail(data);
+    if (!data?.url) return fail(data);
+    // Le détour par Google fait perdre le « #… » de l'adresse (lien d'invitation) : on le garde pour le retour
+    try { sessionStorage.setItem('pendingHash', location.hash); } catch {}
+    location.href = data.url;
   };
   $('#loginForm').onsubmit = async e => {
     e.preventDefault();
@@ -548,6 +568,12 @@ function enterApp() {
 }
 
 async function boot() {
+  // Retour de Google : on remet le « #… » mis de côté avant le détour (lien d'invitation)
+  try {
+    const h = sessionStorage.getItem('pendingHash');
+    sessionStorage.removeItem('pendingHash');
+    if (h && location.hash.length < 2) history.replaceState(null, '', location.pathname + location.search + h);
+  } catch {}
   me = await loadSession();
   // Sans compte : écran de connexion, sauf pour un lien d'invitation (route() s'en charge)
   if (!me) { document.body.classList.add('logged-out'); return route(); }
@@ -561,11 +587,14 @@ const setMenu = open => { document.body.classList.toggle('menu-open', open); };
 $('#menuBtn').onclick = () => setMenu(true);
 $('#backdrop').onclick = () => setMenu(false);
 
+// Mes voyages et ceux auxquels je participe (icône « groupe » et nom du propriétaire pour ces derniers)
 async function loadTrips() {
-  const trips = await api();
-  const cur = currentTrip();
+  trips = await api();
+  const id = tripId();
   $('#tripList').innerHTML = trips.length
-    ? trips.map(t => `<li><a href="#${encodeURIComponent(t)}" class="${t === cur ? 'active' : ''}"><i class="fa-solid ${t === cur ? 'fa-folder-open' : 'fa-folder'}"></i> ${esc(t)}</a></li>`).join('')
+    ? trips.map(t => `<li><a href="#${t.id}" class="${t.id === id ? 'active' : ''}">
+        <i class="fa-solid ${t.role === 'member' ? 'fa-user-group' : t.id === id ? 'fa-folder-open' : 'fa-folder'}"></i>
+        <span>${esc(t.name)}${t.role === 'member' ? `<small>Partagé${t.owner ? ' par ' + esc(t.owner) : ''}</small>` : ''}</span></a></li>`).join('')
     : '<li class="empty-list">Aucun voyage pour l’instant.</li>';
 }
 $('#tripList').onclick = e => {
@@ -579,10 +608,10 @@ $('#tripList').onclick = e => {
 $('#new').onsubmit = async e => {
   e.preventDefault();
   const name = e.target.name.value.trim();
-  await api('/api/trips', { method: 'POST', body: JSON.stringify({ name }) });
+  const t = await api('/api/trips', { method: 'POST', body: JSON.stringify({ name }) });
   e.target.reset();
   setMenu(false);
-  location.hash = encodeURIComponent(name);
+  location.hash = t.id;
 };
 
 // Localisation : position actuelle (gardée 2 min) pour ce qu'on capture ; null si refusée ou indisponible
@@ -627,7 +656,8 @@ async function exifGps(file) {
 // Une note (ou un .txt importé) ne crée pas de fichier : son texte va directement dans la base.
 const kindOfFile = f => kindOf(f.name) || { image: 'img', video: 'vid', audio: 'aud' }[f.type.split('/')[0]];
 async function send(files, live) {
-  const trip = currentTrip();
+  const id = cur?.id;
+  if (!id) return;
   try {
     for (const [i, f] of [...files].entries()) {
       toast.hidden = false;
@@ -635,16 +665,16 @@ async function send(files, live) {
       const kind = kindOfFile(f);
       if (!kind) continue;
       const pos = live ? await here() : await exifGps(f).catch(() => null);
-      const media = { trip, kind, lat: pos?.lat, lng: pos?.lng };
+      const media = { tripId: id, kind, lat: pos?.lat, lng: pos?.lng };
       if (kind === 'note') media.text = await f.text();
-      else media.pathname = (await uploadPresigned(`trips/${trip}/${f.name}`, f, { access: 'private', handleUploadUrl: '/api/upload' })).pathname;
+      else media.pathname = (await uploadPresigned(`trips/id-${id}/${f.name}`, f, { access: 'private', handleUploadUrl: '/api/upload' })).pathname;
       await api('/api/media', { method: 'POST', body: JSON.stringify(media) });
     }
   } catch (e) {
     alert('Échec de l’envoi : ' + e.message);
   }
   toast.hidden = true;
-  if (currentTrip() === trip) loadItems(trip);
+  if (tripId() === id) loadItems(id);
 }
 $('#camImport input').onchange = e => send(e.target.files).finally(() => e.target.value = '');
 
@@ -970,10 +1000,11 @@ recBtns.forEach(b => b.onclick = async () => {
   setRecUI(true);
 });
 
+// Propriétaire : supprimer le voyage. Participant : le quitter (le voyage et ses médias restent).
 $('#delTrip').onclick = async () => {
-  const trip = currentTrip();
-  if (!confirm(`Supprimer « ${trip} » et tout son contenu ?`)) return;
-  await api(`/api/trips?trip=${encodeURIComponent(trip)}`, { method: 'DELETE' });
+  const owner = cur.role === 'owner';
+  if (!confirm(owner ? `Supprimer « ${cur.name} » et tout son contenu ?` : `Quitter le voyage « ${cur.name} » ?`)) return;
+  await api(`/api/trips?id=${cur.id}`, { method: 'DELETE' });
   location.hash = '';
 };
 
@@ -990,7 +1021,7 @@ const kindOf = name => {
 };
 const fmtDate = d => new Date(d).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 // Ligne de la base → média pour la visionneuse et la carte
-const toMedia = r => ({ id: r.id, kind: r.kind, src: r.src, text: r.text || '', date: fmtDate(r.created_at), trip: r.trip,
+const toMedia = r => ({ id: r.id, kind: r.kind, src: r.src, text: r.text || '', date: fmtDate(r.created_at), trip: r.trip, tripId: r.trip_id,
   ...(r.lat !== null ? { lat: r.lat, lng: r.lng } : {}) });
 
 // Accueil : la carte de tous les voyages
@@ -999,7 +1030,7 @@ async function showHome() {
     <p class="home-sub">Tous vos voyages sur la carte</p><div id="map"></div>${SHEET_HTML}
     <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.<br>Ouvrez le menu <i class="fa-solid fa-bars"></i> pour créer un voyage.</p></section>`;
   const rows = await api('/api/trips?all=1');
-  if (currentTrip()) return;
+  if (location.hash.length > 1) return;
   tripMedia = rows.map(toMedia);
   showMap();
 }
@@ -1041,6 +1072,9 @@ async function showShared(token) {
 
 function showTrip(trip) {
   tripPage(false);
+  // Voyage d'un autre, auquel je participe : on le signale
+  if (cur.role === 'member') $('#tabs').insertAdjacentHTML('beforebegin',
+    `<p class="shared-by"><i class="fa-solid fa-user-group"></i> Voyage partagé${cur.owner ? ' par ' + esc(cur.owner) : ''} · vous pouvez y ajouter des souvenirs</p>`);
   $('#note').onsubmit = e => {
     e.preventDefault();
     const text = e.target.text.value.trim();
@@ -1138,10 +1172,10 @@ const thumbHTML = m => m.kind === 'img' ? `<img src="${m.src}" alt="">`
 // Aperçu du lieu : seulement les médias de ce point ; toucher l'un d'eux l'ouvre dans la visionneuse
 function openSheet(items) {
   // Sur l'accueil, on indique le voyage (et un bouton pour l'ouvrir s'il n'y en a qu'un)
-  const trips = [...new Set(items.map(m => m.trip).filter(Boolean))];
-  $('#sheetTitle').textContent = (items.length > 1 ? `${items.length} souvenirs` : '1 souvenir') + (trips.length ? ` · ${trips.join(', ')}` : ' ici');
-  $('#sheetOpen').hidden = trips.length !== 1;
-  $('#sheetOpen').onclick = () => { location.hash = encodeURIComponent(trips[0]); };
+  const names = [...new Set(items.map(m => m.trip).filter(Boolean))], ids = [...new Set(items.map(m => m.tripId).filter(Boolean))];
+  $('#sheetTitle').textContent = (items.length > 1 ? `${items.length} souvenirs` : '1 souvenir') + (names.length ? ` · ${names.join(', ')}` : ' ici');
+  $('#sheetOpen').hidden = ids.length !== 1;
+  $('#sheetOpen').onclick = () => { location.hash = ids[0]; };
   $('#sheetStrip').innerHTML = items.map((m, i) =>
     `<button class="sheet-item ${m.kind}" data-i="${i}">${m.kind === 'vid' ? `<video src="${m.src}#t=0.1" muted playsinline preload="metadata"></video><i class="fa-solid fa-play badge"></i>` : thumbHTML(m)}</button>`).join('');
   $('#sheetStrip').onclick = e => { const b = e.target.closest('[data-i]'); if (b) openViewer(items, +b.dataset.i); };
@@ -1350,9 +1384,9 @@ addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') viewerGo(1);
 });
 
-async function loadItems(trip) {
-  const rows = await api(`/api/trips?trip=${encodeURIComponent(trip)}`); // du plus récent au plus ancien
-  if (currentTrip() === trip) renderItems(rows, false);
+async function loadItems(id) {
+  const rows = await api(`/api/trips?id=${id}`); // du plus récent au plus ancien
+  if (tripId() === id) renderItems(rows, false);
 }
 
 // Affiche les souvenirs d'un voyage. readonly = vue partagée : aucun bouton de suppression.
@@ -1392,7 +1426,8 @@ function renderItems(rows, readonly) {
       // Le rond lit l'audio sur place ; toucher la durée l'ouvre dans la visionneuse
       el.querySelector('.len').onclick = () => openViewer(media, i);
     }
-    if (!readonly) {
+    // Suppression : le propriétaire du voyage peut tout supprimer, un participant seulement ce qu'il a ajouté
+    if (!readonly && (cur.role === 'owner' || row.user_id === me.id)) {
       const del = document.createElement('button');
       del.className = 'del'; del.innerHTML = '<i class="fa-solid fa-xmark"></i>'; del.setAttribute('aria-label', 'Supprimer');
       del.onclick = async () => {
@@ -1438,7 +1473,7 @@ addEventListener('scroll', () => {
   lastScrollY = y;
 }, { passive: true });
 
-function route() {
+async function route() {
   document.body.classList.remove('bar-min');
   setMenu(false);
   // Lien d'invitation (#share=…) : visible avec ou sans compte
@@ -1447,34 +1482,74 @@ function route() {
     if (me) loadTrips();
     return showShared(decodeURIComponent(share));
   }
-  if (!me) return showLogin();
-  const trip = currentTrip();
-  $('#title').textContent = trip || 'Mes voyages';
-  $('#delTrip').hidden = $('#shareTrip').hidden = $('#actions').hidden = !trip;
-  loadTrips();
-  if (trip) return showTrip(trip);
+  if (!me) return showLogin(); // un lien « participer » (#join=…) exige un compte : il est repris après la connexion
+  // Lien d'invitation à participer : on rejoint le voyage, puis on l'ouvre
+  const join = location.hash.match(/^#join=(.+)/)?.[1];
+  if (join) {
+    const t = await api('/api/trips?join=' + encodeURIComponent(decodeURIComponent(join)), { method: 'POST' }).catch(() => null);
+    history.replaceState(null, '', location.pathname + (t ? '#' + t.id : ''));
+  }
+  await loadTrips();
+  const id = tripId();
+  cur = trips.find(t => t.id === id) || null;
+  if (id && !cur) history.replaceState(null, '', location.pathname); // voyage inconnu ou retiré : retour à l'accueil
+  const owner = cur?.role === 'owner';
+  $('#title').textContent = cur?.name || 'Mes voyages';
+  $('#actions').hidden = $('#delTrip').hidden = !cur;
+  $('#shareTrip').hidden = !owner;
+  $('#delTrip').innerHTML = `<i class="fa-solid ${owner ? 'fa-trash-can' : 'fa-right-from-bracket'}"></i>`;
+  $('#delTrip').setAttribute('aria-label', owner ? 'Supprimer le voyage' : 'Quitter le voyage');
+  if (cur) return showTrip(cur.id);
   showHome();
 }
 addEventListener('hashchange', route);
 
-// Partage : le propriétaire crée un lien d'invitation en lecture seule, qu'il peut copier, envoyer ou désactiver
+// Partage (propriétaire) : deux liens par voyage, à copier, envoyer ou désactiver.
+// share = lecture seule, sans compte ; invite = participer (compte obligatoire, la personne peut ajouter des souvenirs).
 const shareDlg = $('#shareDlg');
-$('#shareTrip').onclick = async () => {
-  const { token } = await api(`/api/trips?share=1&trip=${encodeURIComponent(currentTrip())}`, { method: 'POST' });
-  $('#shareLink').value = `${location.origin}/#share=${encodeURIComponent(token)}`;
-  $('#shareSend').hidden = !navigator.share;
-  $('#shareCopy').textContent = 'Copier le lien';
-  shareDlg.showModal();
+const SHARE = {
+  share: { hash: 'share', help: 'Toute personne qui a ce lien peut <b>voir</b> le voyage, sans compte. Elle ne peut rien ajouter, modifier ni supprimer.',
+    off: 'Désactiver ce lien ? Les personnes qui l’ont reçu ne pourront plus voir le voyage.' },
+  invite: { hash: 'join', help: 'La personne doit <b>se connecter</b> (ou créer un compte). Elle rejoint alors le voyage et peut y <b>ajouter</b> des souvenirs, comme vous.',
+    off: 'Désactiver ce lien ? Plus personne ne pourra rejoindre le voyage avec. Les participants actuels restent.' },
 };
+let shareKind = 'share';
+async function showShare(kind) {
+  shareKind = kind;
+  $('#shareTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.kind === kind));
+  $('#shareHelp').innerHTML = SHARE[kind].help;
+  $('#shareCopy').textContent = 'Copier le lien';
+  $('#shareSend').hidden = !navigator.share;
+  $('#memberBox').hidden = true;
+  const { token } = await api(`/api/trips?link=${kind}&id=${cur.id}`, { method: 'POST' });
+  $('#shareLink').value = `${location.origin}/#${SHARE[kind].hash}=${encodeURIComponent(token)}`;
+  if (kind === 'invite') loadMembers();
+}
+async function loadMembers() {
+  const list = await api(`/api/trips?members=1&id=${cur.id}`);
+  $('#memberBox').hidden = false;
+  $('#memberList').innerHTML = list.length
+    ? list.map(m => `<li><span>${esc(m.name)}</span><button data-member="${esc(m.id)}">Retirer</button></li>`).join('')
+    : '<li class="none">Personne n’a encore rejoint ce voyage.</li>';
+}
+$('#shareTrip').onclick = () => { shareDlg.showModal(); showShare('share'); };
+$('#shareTabs').onclick = e => { if (e.target.dataset.kind) showShare(e.target.dataset.kind); };
 $('#shareCopy').onclick = async () => {
   await navigator.clipboard.writeText($('#shareLink').value);
   $('#shareCopy').textContent = 'Lien copié ✓';
 };
-$('#shareSend').onclick = () => navigator.share({ title: currentTrip(), text: `Regarde mon voyage « ${currentTrip()} »`, url: $('#shareLink').value }).catch(() => {});
+$('#shareSend').onclick = () => navigator.share({ title: cur.name, url: $('#shareLink').value,
+  text: shareKind === 'invite' ? `Rejoins mon voyage « ${cur.name} » pour y ajouter tes souvenirs` : `Regarde mon voyage « ${cur.name} »` }).catch(() => {});
 $('#shareOff').onclick = async () => {
-  if (!confirm('Désactiver ce lien ? Les personnes qui l’ont reçu ne pourront plus voir le voyage.')) return;
-  await api(`/api/trips?share=1&trip=${encodeURIComponent(currentTrip())}`, { method: 'DELETE' });
+  if (!confirm(SHARE[shareKind].off)) return;
+  await api(`/api/trips?link=${shareKind}&id=${cur.id}`, { method: 'DELETE' });
   shareDlg.close();
+};
+$('#memberList').onclick = async e => {
+  const uid = e.target.dataset.member;
+  if (!uid || !confirm('Retirer cette personne du voyage ? Les souvenirs qu’elle a ajoutés restent.')) return;
+  await api(`/api/trips?member=${encodeURIComponent(uid)}&id=${cur.id}`, { method: 'DELETE' });
+  loadMembers();
 };
 $('#shareClose').onclick = () => shareDlg.close();
 $('#logout').onclick = async () => { await authCall('sign-out', {}); location.reload(); };
