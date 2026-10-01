@@ -31,17 +31,26 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'GET' && !id) {
-    // Carte de l'accueil : tous les médias localisés des voyages accessibles, avec leur voyage
-    if (all) return res.json(await withSrc(await sql`
-      select m.*, t.name as trip, t.id as trip_id from media m join trips t on t.id = m.trip_id
-      where m.lat is not null and (t.user_id = ${user.id}
-        or exists (select 1 from trip_members x where x.trip_id = t.id and x.user_id = ${user.id}))
-      order by m.created_at desc`));
+    // Accueil : les médias localisés (carte) et les 12 derniers souvenirs, parmi tous les voyages accessibles
+    if (all) {
+      const located = await sql`
+        select m.*, t.name as trip, t.id as trip_id from media m join trips t on t.id = m.trip_id
+        where m.lat is not null and (t.user_id = ${user.id}
+          or exists (select 1 from trip_members x where x.trip_id = t.id and x.user_id = ${user.id}))
+        order by m.created_at desc`;
+      const recent = await sql`
+        select m.*, t.name as trip, t.id as trip_id from media m join trips t on t.id = m.trip_id
+        where t.user_id = ${user.id}
+          or exists (select 1 from trip_members x where x.trip_id = t.id and x.user_id = ${user.id})
+        order by m.created_at desc limit 12`;
+      await withSrc([...located, ...recent]);
+      return res.json({ located, recent });
+    }
     // ponytail: les voyages créés avant l'ajout des comptes (sans propriétaire) vont au premier compte qui se connecte
     await sql`update trips set user_id = ${user.id} where user_id is null`;
     // Pour les cartes de l'accueil : nombre de souvenirs, dates du premier et du dernier, et dernière photo en couverture
     const trips = await withSrc(await sql`
-      select t.id, t.name, t.user_id, case when t.user_id = ${user.id} then 'owner' else 'member' end as role,
+      select t.id, t.name, t.icon, t.user_id, case when t.user_id = ${user.id} then 'owner' else 'member' end as role,
         (select count(*)::int from media m where m.trip_id = t.id) as count,
         (select min(m.created_at) from media m where m.trip_id = t.id) as first_at,
         (select max(m.created_at) from media m where m.trip_id = t.id) as last_at,
@@ -50,15 +59,16 @@ export default async function handler(req, res) {
       where t.user_id = ${user.id} or exists (select 1 from trip_members x where x.trip_id = t.id and x.user_id = ${user.id})
       order by t.created_at`);
     const names = await namesOf([...new Set(trips.filter(t => t.role === 'member').map(t => t.user_id))]);
-    return res.json(trips.map(t => ({ id: t.id, name: t.name, role: t.role, owner: names[t.user_id] ?? null,
+    return res.json(trips.map(t => ({ id: t.id, name: t.name, icon: t.icon, role: t.role, owner: names[t.user_id] ?? null,
       count: t.count, firstAt: t.first_at, lastAt: t.last_at, cover: t.src ?? null })));
   }
 
   if (req.method === 'POST' && !id) {
     const name = String(req.body?.name || '').trim();
     if (!name || name.includes('/')) return res.status(400).json({ error: 'Nom invalide' });
+    const icon = /^fa-[a-z-]{2,30}$/.test(req.body?.icon) ? req.body.icon : null;
     const [t] = await sql`
-      insert into trips (user_id, name) values (${user.id}, ${name})
+      insert into trips (user_id, name, icon) values (${user.id}, ${name}, ${icon})
       on conflict (user_id, name) do update set name = excluded.name returning id, name`;
     return res.json(t);
   }

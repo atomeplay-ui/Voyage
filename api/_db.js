@@ -39,6 +39,8 @@ export function schema() {
       created_at timestamptz not null default now(),
       primary key (trip_id, user_id))`;
     await sql`alter table media add column if not exists user_id text`;
+    // Icône du voyage choisie à la création (nom d'icône Font Awesome, ex. « fa-plane »)
+    await sql`alter table trips add column if not exists icon text`;
   })().catch(e => { ready = null; throw e; });
 }
 

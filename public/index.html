@@ -72,25 +72,42 @@
   body.menu-open #drawer { transform: none; }
   #backdrop { position: fixed; z-index: 20; inset: 0; background: rgba(0,0,0,.18); opacity: 0; pointer-events: none; transition: opacity .3s; }
   body.menu-open #backdrop { opacity: 1; pointer-events: auto; }
-  #drawer h2 { margin: 4px 8px 16px; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
-  #drawer h2 i { color: var(--accent); }
-  #new { display: flex; gap: 8px; margin-bottom: 14px; }
-  /* Champ posé sur le menu en verre : fond simple, sans second verre */
-  #new input { flex: 1; min-width: 0; height: 44px; padding: 0 16px; border-radius: 999px; outline: none;
-    background: var(--glass-press); border: 1px solid var(--glass-border); box-shadow: inset 0 1px 2px rgba(0,0,0,.06); }
-  #new input::placeholder { color: var(--muted); }
-  #new button { width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 18px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 6px 16px rgba(0,122,255,.35); }
-  #tripList { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
-  #tripList a { display: flex; font-size: 16px; align-items: center; gap: 12px; padding: 13px 14px; margin-bottom: 4px; border-radius: 18px; text-decoration: none; color: inherit; transition: background .15s; }
-  #tripList a i { color: var(--accent); width: 20px; text-align: center; }
-  #tripList a:active { background: var(--glass-press); }
-  #tripList a.active { background: var(--glass-hi); font-weight: 600; box-shadow: inset 0 1px 0 var(--glass-hi), 0 2px 10px rgba(0,0,0,.08); }
-  .empty-list { color: var(--muted); padding: 12px; }
-  /* Compte, en bas du menu */
-  .account { display: flex; align-items: center; gap: 8px; padding: 12px 6px 0; border-top: 1px solid var(--glass-border); font-size: 13px; }
-  .account span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); cursor: pointer; }
-  .account button { padding: 8px 12px; border-radius: 999px; background: var(--glass-press); font-weight: 600; white-space: nowrap; }
+  /* En-tête du menu : mon profil (avatar aux initiales, nom, e-mail), qu'on touche pour le modifier */
+  #drawer .me { display: flex; align-items: center; gap: 12px; padding: 6px 8px 14px; text-align: left; border-bottom: 1px solid var(--glass-border); margin-bottom: 10px; }
+  .avatar { flex: none; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 17px;
+    background: linear-gradient(135deg, #0a84ff, #7c3aed); box-shadow: inset 0 1px 1px rgba(255,255,255,.5), 0 4px 12px rgba(88,86,214,.3); }
+  .me-text { flex: 1; min-width: 0; }
+  .me-text b, .me-text small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .me-text b { font-size: 17px; }
+  .me-text small { font-size: 12px; color: var(--muted); }
+  #drawer .me > i { color: var(--muted); font-size: 13px; }
+  /* Lignes du menu : pastille d'icône colorée, nom, détail */
+  #tripList { overflow-y: auto; flex: 1; margin: 0 -4px; padding: 0 4px; }
+  .nav-label { margin: 12px 10px 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  #drawer a { display: flex; align-items: center; gap: 12px; padding: 8px 10px; margin-bottom: 2px; border-radius: 18px; text-decoration: none; color: inherit; transition: background .15s, transform .15s; }
+  #drawer a:active { background: var(--glass-press); transform: scale(.98); }
+  #drawer a.active { background: var(--glass-hi); box-shadow: inset 0 1px 0 var(--glass-hi), 0 2px 10px rgba(0,0,0,.08); }
+  #drawer a > span:last-child { min-width: 0; }
+  #drawer a b { display: block; font-size: 15.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #drawer a small { display: block; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tico { flex: none; width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; color: #fff; font-size: 16px;
+    background: linear-gradient(150deg, hsl(var(--hue, 211) 80% 58%), hsl(calc(var(--hue, 211) + 40) 75% 46%));
+    box-shadow: inset 0 1px 1px rgba(255,255,255,.45), 0 3px 8px hsl(var(--hue, 211) 70% 40% / .28); }
+  .empty-list { color: var(--muted); padding: 6px 10px 12px; font-size: 14px; }
+  /* Création d'un voyage : nom + choix d'une icône */
+  #new { display: grid; gap: 10px; padding: 12px; margin-top: 8px; border-radius: 22px; background: var(--glass-press); border: 1px solid var(--glass-border); }
+  #new input[name=name] { height: 44px; padding: 0 14px; border-radius: 14px; outline: none; background: var(--surface); border: 1px solid var(--surface-line); }
+  #new input[name=name]:focus { border-color: var(--accent); }
+  .icon-pick { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .icon-pick label { aspect-ratio: 1; border-radius: 12px; display: grid; place-items: center; cursor: pointer; color: var(--muted); background: rgba(127,127,127,.12); transition: transform .15s, background .15s; }
+  .icon-pick input { position: absolute; opacity: 0; pointer-events: none; }
+  .icon-pick label:has(:checked) { color: #fff; background: var(--accent); transform: scale(1.08); box-shadow: 0 3px 10px rgba(0,122,255,.35); }
+  .icon-pick label:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .new-actions { display: flex; gap: 8px; }
+  .new-actions button { flex: 1; height: 42px; border-radius: 14px; font-weight: 600; background: rgba(127,127,127,.14); }
+  .new-actions .primary { background: var(--accent); color: #fff; }
+  .new-btn { margin-top: 10px; height: 46px; border-radius: 16px; font-weight: 600; color: var(--accent); background: var(--glass-press); border: 1px dashed var(--glass-border); }
+  .logout { margin-top: 8px; height: 40px; border-radius: 14px; font-size: 13px; color: var(--muted); }
 
   /* Partage : bandeau de la vue invitée et fenêtre du lien d'invitation */
   .shared-by { margin: 0 0 12px; text-align: center; font-size: 13px; color: var(--muted); }
@@ -116,9 +133,6 @@
   #memberList li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #memberList li.none { color: var(--muted); font-size: 13px; }
   #shareDlg #memberList button { width: auto; height: 32px; margin: 0; padding: 0 12px; font-size: 13px; color: var(--danger); }
-  /* Voyages partagés dans le menu : nom du propriétaire sous le nom du voyage */
-  #tripList a span { min-width: 0; }
-  #tripList a small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
 
   /* Écran de connexion (rien d'autre n'est visible tant qu'on n'est pas connecté) */
   body.logged-out #drawer, body.logged-out #backdrop, body.logged-out #actions, body.logged-out .top .icon { display: none; }
@@ -174,6 +188,12 @@
   .trip-card .info small { font-size: 12.5px; opacity: .88; }
   .trip-card .badge { position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px); padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgba(0,0,0,.4); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  .trip-card .info b i { font-size: 15px; margin-right: 4px; opacity: .9; }
+  /* Derniers souvenirs : bande de miniatures, avec le nom du voyage sous chacune */
+  .recent { margin: 0 -10px; padding: 2px 10px 6px; }
+  .recent .sheet-item { flex-basis: 104px; height: 104px; }
+  .sheet-item .cap { position: absolute; inset: auto 0 0 0; padding: 14px 6px 5px; font-size: 10.5px; font-weight: 600; color: #fff; text-align: left;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: linear-gradient(transparent, rgba(0,0,0,.65)); }
   .trip-card.new { flex-basis: min(42vw, 170px); background: var(--surface); color: var(--accent); border: 2px dashed var(--surface-line); box-shadow: none; }
   .trip-card.new .info { background: none; color: var(--text); text-align: center; }
   .trip-card.new .info b { font-size: 15px; }
@@ -410,10 +430,20 @@
 </header>
 
 <nav id="drawer">
-  <h2><i class="fa-solid fa-suitcase-rolling"></i> Mes voyages</h2>
-  <form id="new"><input name="name" placeholder="Nouveau voyage" required><button aria-label="Créer"><i class="fa-solid fa-plus"></i></button></form>
-  <ul id="tripList"></ul>
-  <div class="account"><span id="who"></span><button id="logout"><i class="fa-solid fa-right-from-bracket"></i> Se déconnecter</button></div>
+  <button class="me" id="who" aria-label="Modifier mon profil">
+    <span class="avatar" id="avatar"></span>
+    <span class="me-text"><b id="whoName"></b><small id="whoMail"></small></span>
+    <i class="fa-solid fa-pen"></i>
+  </button>
+  <a class="nav-item" id="homeLink" href="#"><span class="tico"><i class="fa-solid fa-house"></i></span><span><b>Accueil</b></span></a>
+  <div id="tripList"></div>
+  <form id="new" hidden>
+    <input name="name" placeholder="Nom du voyage" required maxlength="60" aria-label="Nom du voyage">
+    <div class="icon-pick" id="iconPick" role="radiogroup" aria-label="Icône du voyage"></div>
+    <div class="new-actions"><button type="button" id="newCancel">Annuler</button><button class="primary">Créer</button></div>
+  </form>
+  <button class="new-btn" id="newBtn"><i class="fa-solid fa-plus"></i> Nouveau voyage</button>
+  <button class="logout" id="logout"><i class="fa-solid fa-right-from-bracket"></i> Se déconnecter</button>
 </nav>
 <div id="backdrop"></div>
 
@@ -582,8 +612,9 @@ function showProfile() {
 
 function enterApp() {
   document.body.classList.remove('logged-out');
-  $('#who').textContent = me.name;
-  $('#who').title = me.email || '';
+  $('#whoName').textContent = me.name;
+  $('#whoMail').textContent = me.email || '';
+  $('#avatar').textContent = me.name.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(); // initiales
   route();
 }
 
@@ -607,17 +638,27 @@ const setMenu = open => { document.body.classList.toggle('menu-open', open); };
 $('#menuBtn').onclick = () => setMenu(true);
 $('#backdrop').onclick = () => setMenu(false);
 
-// Mes voyages et ceux auxquels je participe (icône « groupe » et nom du propriétaire pour ces derniers)
+// Icônes proposées à la création d'un voyage (la première est celle par défaut)
+const TRIP_ICONS = ['fa-suitcase-rolling', 'fa-plane', 'fa-umbrella-beach', 'fa-mountain-sun', 'fa-city', 'fa-tree',
+  'fa-sailboat', 'fa-car-side', 'fa-train', 'fa-campground', 'fa-person-hiking', 'fa-bicycle',
+  'fa-snowflake', 'fa-landmark', 'fa-utensils', 'fa-wine-glass', 'fa-camera-retro', 'fa-heart'];
+const tripIcon = t => t.icon || TRIP_ICONS[0];
+const tripHue = t => Math.round(rand(t.name, 'hue') * 360); // couleur stable par voyage
+
+// Menu : mes voyages, puis ceux auxquels je participe (avec le nom de leur propriétaire)
+const tripRow = (t, id) => `<a href="#${t.id}" class="${t.id === id ? 'active' : ''}">
+  <span class="tico" style="--hue:${tripHue(t)}"><i class="fa-solid ${tripIcon(t)}"></i></span>
+  <span><b>${esc(t.name)}</b><small>${t.role === 'member' ? `Partagé${t.owner ? ' par ' + esc(t.owner) : ''} · ` : ''}${t.count} souvenir${t.count > 1 ? 's' : ''}</small></span></a>`;
 async function loadTrips() {
   trips = await api();
-  const id = tripId();
-  $('#tripList').innerHTML = trips.length
-    ? trips.map(t => `<li><a href="#${t.id}" class="${t.id === id ? 'active' : ''}">
-        <i class="fa-solid ${t.role === 'member' ? 'fa-user-group' : t.id === id ? 'fa-folder-open' : 'fa-folder'}"></i>
-        <span>${esc(t.name)}${t.role === 'member' ? `<small>Partagé${t.owner ? ' par ' + esc(t.owner) : ''}</small>` : ''}</span></a></li>`).join('')
-    : '<li class="empty-list">Aucun voyage pour l’instant.</li>';
+  const id = tripId(), mine = trips.filter(t => t.role === 'owner'), shared = trips.filter(t => t.role === 'member');
+  $('#homeLink').classList.toggle('active', location.hash.length < 2);
+  $('#tripList').innerHTML = `<div class="nav-label">Mes voyages</div>`
+    + (mine.map(t => tripRow(t, id)).join('') || '<p class="empty-list">Aucun voyage pour l’instant.</p>')
+    + (shared.length ? `<div class="nav-label">Partagés avec moi</div>` + shared.map(t => tripRow(t, id)).join('') : '');
 }
-$('#tripList').onclick = e => {
+// Un lien du menu (Accueil ou voyage) : on ferme le menu, puis on y va (ou on recharge si on y est déjà)
+$('#drawer').onclick = e => {
   const a = e.target.closest('a');
   if (!a) return;
   e.preventDefault();
@@ -625,11 +666,22 @@ $('#tripList').onclick = e => {
   if (location.hash === a.hash) route(); else location.hash = a.hash;
 };
 
+// Création d'un voyage : le bouton déplie un petit formulaire (nom + icône)
+$('#iconPick').innerHTML = TRIP_ICONS.map((ic, i) =>
+  `<label><input type="radio" name="icon" value="${ic}" ${i ? '' : 'checked'}><i class="fa-solid ${ic}"></i></label>`).join('');
+function openNew(open = true) {
+  $('#new').hidden = !open;
+  $('#newBtn').hidden = open;
+  if (open) { setMenu(true); $('#new').elements.name.focus(); }
+}
+$('#newBtn').onclick = () => openNew();
+$('#newCancel').onclick = () => openNew(false);
 $('#new').onsubmit = async e => {
   e.preventDefault();
-  const name = e.target.name.value.trim();
-  const t = await api('/api/trips', { method: 'POST', body: JSON.stringify({ name }) });
+  const name = e.target.elements.name.value.trim(), icon = e.target.elements.icon.value;
+  const t = await api('/api/trips', { method: 'POST', body: JSON.stringify({ name, icon }) });
   e.target.reset();
+  openNew(false);
   setMenu(false);
   location.hash = t.id;
 };
@@ -1049,12 +1101,19 @@ const fmtDays = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short
 const plural = (n, word) => `<b>${n}</b> ${word}${n > 1 ? 's' : ''}`;
 function tripCard(t) {
   const dates = t.firstAt ? fmtDays.formatRange(new Date(t.firstAt), new Date(t.lastAt)) : 'Pas encore de souvenir';
-  // Sans photo : un dégradé dont la teinte dépend du nom du voyage (toujours la même pour un voyage)
-  const hue = Math.round(rand(t.name, 'hue') * 360);
-  return `<a class="trip-card" href="#${t.id}" style="--hue:${hue}">
-    ${t.cover ? `<img src="${t.cover}" loading="lazy" alt="">` : '<i class="fa-solid fa-suitcase-rolling"></i>'}
+  // Sans photo : l'icône du voyage sur un dégradé à sa couleur
+  return `<a class="trip-card" href="#${t.id}" style="--hue:${tripHue(t)}">
+    ${t.cover ? `<img src="${t.cover}" loading="lazy" alt="">` : `<i class="fa-solid ${tripIcon(t)}"></i>`}
     ${t.role === 'member' ? `<span class="badge"><i class="fa-solid fa-user-group"></i> ${t.owner ? esc(t.owner) : 'Partagé'}</span>` : ''}
-    <span class="info"><b>${esc(t.name)}</b><small>${dates}</small>${t.count ? `<small>${t.count} souvenir${t.count > 1 ? 's' : ''}</small>` : ''}</span></a>`;
+    <span class="info"><b><i class="fa-solid ${tripIcon(t)}"></i> ${esc(t.name)}</b><small>${dates}</small>${t.count ? `<small>${t.count} souvenir${t.count > 1 ? 's' : ''}</small>` : ''}</span></a>`;
+}
+
+// Bande de miniatures (aperçu d'un lieu sur la carte, derniers souvenirs) : un appui ouvre la visionneuse sur ces médias
+function fillStrip(box, items, caption) {
+  box.innerHTML = items.map((m, i) => `<button class="sheet-item ${m.kind}" data-i="${i}">${m.kind === 'vid'
+    ? `<video src="${m.src}#t=0.1" muted playsinline preload="metadata"></video><i class="fa-solid fa-play badge"></i>` : thumbHTML(m)}${
+    caption ? `<small class="cap">${esc(m.trip || '')}</small>` : ''}</button>`).join('');
+  box.onclick = e => { const b = e.target.closest('[data-i]'); if (b) openViewer(items, +b.dataset.i); };
 }
 async function showHome() {
   const total = trips.reduce((n, t) => n + t.count, 0);
@@ -1063,13 +1122,17 @@ async function showHome() {
     <p class="home-stats">${plural(trips.length, 'voyage')} · ${plural(total, 'souvenir')}<span id="places"></span></p>
     <div class="trip-cards">${trips.map(tripCard).join('')}
       <button class="trip-card new" id="newCard"><i class="fa-solid fa-plus"></i><span class="info"><b>Nouveau voyage</b></span></button></div>
+    <div id="recentBox" hidden><h3 class="home-h">Derniers souvenirs</h3><div class="sheet-strip recent" id="recent"></div></div>
     <h3 class="home-h">Sur la carte</h3>
     <div id="mapTab" class="home-map"><div id="map"></div>${SHEET_HTML}
     <p class="map-empty" hidden>Aucun souvenir localisé pour l’instant.</p></div></section>`;
-  $('#newCard').onclick = () => { setMenu(true); $('#new input').focus(); };
-  const rows = await api('/api/trips?all=1');
+  $('#newCard').onclick = () => openNew();
+  const { located, recent } = await api('/api/trips?all=1');
   if (location.hash.length > 1) return;
-  tripMedia = rows.map(toMedia);
+  // Derniers souvenirs ajoutés, tous voyages confondus (y compris par les autres participants)
+  $('#recentBox').hidden = !recent.length;
+  fillStrip($('#recent'), recent.map(toMedia), true);
+  tripMedia = located.map(toMedia);
   // Lieux : positions distinctes à environ 1 km près
   const places = new Set(tripMedia.map(m => `${m.lat.toFixed(2)},${m.lng.toFixed(2)}`)).size;
   if (places) $('#places').innerHTML = ` · ${plural(places, 'lieu').replace('lieus', 'lieux')}`;
@@ -1217,9 +1280,7 @@ function openSheet(items) {
   $('#sheetTitle').textContent = (items.length > 1 ? `${items.length} souvenirs` : '1 souvenir') + (names.length ? ` · ${names.join(', ')}` : ' ici');
   $('#sheetOpen').hidden = ids.length !== 1;
   $('#sheetOpen').onclick = () => { location.hash = ids[0]; };
-  $('#sheetStrip').innerHTML = items.map((m, i) =>
-    `<button class="sheet-item ${m.kind}" data-i="${i}">${m.kind === 'vid' ? `<video src="${m.src}#t=0.1" muted playsinline preload="metadata"></video><i class="fa-solid fa-play badge"></i>` : thumbHTML(m)}</button>`).join('');
-  $('#sheetStrip').onclick = e => { const b = e.target.closest('[data-i]'); if (b) openViewer(items, +b.dataset.i); };
+  fillStrip($('#sheetStrip'), items);
   $('#mapSheet').hidden = false;
   map.easeTo({ center: [items[0].lng, items[0].lat], offset: [0, -90], duration: 500 }); // garde le point visible au-dessus du panneau
 }
