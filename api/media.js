@@ -12,6 +12,7 @@ export default async function handler(req, res) {
     const { tripId, kind, pathname = null, text = null } = req.body || {};
     const trip = await tripFor(user, tripId);
     if (!trip) return res.status(404).json({ error: 'Voyage introuvable' });
+    if (trip.role === 'viewer') return res.status(403).json({ error: 'Voyage en lecture seule' });
     // Un fichier doit avoir été envoyé dans le dossier de ce voyage (voir send() côté appli)
     const ok = kind === 'note' ? typeof text === 'string' && text.trim()
       : ['img', 'vid', 'aud'].includes(kind) && typeof pathname === 'string' && pathname.startsWith(`trips/id-${trip.id}/`);

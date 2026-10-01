@@ -39,6 +39,8 @@ export function schema() {
       created_at timestamptz not null default now(),
       primary key (trip_id, user_id))`;
     await sql`alter table media add column if not exists user_id text`;
+    // Rôle d'un invité : 'member' (participe) ou 'viewer' (lecture seule, arrivé par le lien de lecture avec un compte)
+    await sql`alter table trip_members add column if not exists role text not null default 'member'`;
     // Icône du voyage choisie à la création (nom d'icône Font Awesome, ex. « fa-plane »)
     await sql`alter table trips add column if not exists icon text`;
   })().catch(e => { ready = null; throw e; });
@@ -76,10 +78,11 @@ export async function withSrc(rows) {
   return rows;
 }
 
-// Voyage auquel l'utilisateur a accès, avec son rôle : 'owner' (propriétaire) ou 'member' (participant invité). Sinon null.
+// Voyage auquel l'utilisateur a accès, avec son rôle : 'owner' (propriétaire), 'member' (participant) ou 'viewer' (lecture seule). Sinon null.
 export async function tripFor(user, id) {
   const [t] = await sql`
-    select t.*, case when t.user_id = ${user.id} then 'owner' else 'member' end as role from trips t
+    select t.*, case when t.user_id = ${user.id} then 'owner'
+      else (select m.role from trip_members m where m.trip_id = t.id and m.user_id = ${user.id}) end as role from trips t
     where t.id = ${num(id)} and (t.user_id = ${user.id}
       or exists (select 1 from trip_members m where m.trip_id = t.id and m.user_id = ${user.id}))`;
   return t || null;

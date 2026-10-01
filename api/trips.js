@@ -6,7 +6,7 @@ import { sql, schema, withSrc, requireUser, tripFor, namesOf } from './_db.js';
 // Rôles : propriétaire (tout), participant invité (voir, ajouter, supprimer ses médias), lien de lecture seule (voir).
 export default async function handler(req, res) {
   await schema();
-  const { id, all, token, link, join, members, member } = req.query;
+  const { id, all, token, link, join, view, members, member } = req.query;
 
   // Lien de lecture seule : voir un voyage sans compte. C'est la seule route ouverte sans connexion,
   // et elle ne permet que de lire ce voyage-là.
@@ -26,7 +26,17 @@ export default async function handler(req, res) {
   if (req.method === 'POST' && join) {
     const [t] = await sql`select id, name, user_id from trips where invite_token = ${join}`;
     if (!t) return res.status(404).json({ error: 'Invitation invalide ou désactivée' });
-    if (t.user_id !== user.id) await sql`insert into trip_members (trip_id, user_id) values (${t.id}, ${user.id}) on conflict do nothing`;
+    // Quelqu'un qui n'avait que la lecture passe participant
+    if (t.user_id !== user.id) await sql`insert into trip_members (trip_id, user_id) values (${t.id}, ${user.id})
+      on conflict (trip_id, user_id) do update set role = 'member'`;
+    return res.json({ id: t.id, name: t.name });
+  }
+
+  // Lien de lecture seule ouvert avec un compte : le voyage est ajouté à « Partagés avec moi », en lecture seule
+  if (req.method === 'POST' && view) {
+    const [t] = await sql`select id, name, user_id from trips where share_token = ${view}`;
+    if (!t) return res.status(404).json({ error: 'Lien de partage invalide ou désactivé' });
+    if (t.user_id !== user.id) await sql`insert into trip_members (trip_id, user_id, role) values (${t.id}, ${user.id}, 'viewer') on conflict do nothing`;
     return res.json({ id: t.id, name: t.name });
   }
 
@@ -50,7 +60,8 @@ export default async function handler(req, res) {
     await sql`update trips set user_id = ${user.id} where user_id is null`;
     // Pour les cartes de l'accueil : nombre de souvenirs, dates du premier et du dernier, et dernière photo en couverture
     const trips = await withSrc(await sql`
-      select t.id, t.name, t.icon, t.user_id, case when t.user_id = ${user.id} then 'owner' else 'member' end as role,
+      select t.id, t.name, t.icon, t.user_id, case when t.user_id = ${user.id} then 'owner'
+        else (select x.role from trip_members x where x.trip_id = t.id and x.user_id = ${user.id}) end as role,
         (select count(*)::int from media m where m.trip_id = t.id) as count,
         (select min(m.created_at) from media m where m.trip_id = t.id) as first_at,
         (select max(m.created_at) from media m where m.trip_id = t.id) as last_at,
@@ -58,7 +69,7 @@ export default async function handler(req, res) {
       from trips t
       where t.user_id = ${user.id} or exists (select 1 from trip_members x where x.trip_id = t.id and x.user_id = ${user.id})
       order by t.created_at`);
-    const names = await namesOf([...new Set(trips.filter(t => t.role === 'member').map(t => t.user_id))]);
+    const names = await namesOf([...new Set(trips.filter(t => t.role !== 'owner').map(t => t.user_id))]);
     return res.json(trips.map(t => ({ id: t.id, name: t.name, icon: t.icon, role: t.role, owner: names[t.user_id] ?? null,
       count: t.count, firstAt: t.first_at, lastAt: t.last_at, cover: t.src ?? null })));
   }
@@ -80,9 +91,9 @@ export default async function handler(req, res) {
 
   // Participants : liste (tous), retrait d'un participant (propriétaire)
   if (members) {
-    const rows = await sql`select user_id from trip_members where trip_id = ${trip.id} order by created_at`;
+    const rows = await sql`select user_id, role from trip_members where trip_id = ${trip.id} order by created_at`;
     const names = await namesOf(rows.map(r => r.user_id));
-    return res.json(rows.map(r => ({ id: r.user_id, name: names[r.user_id] ?? 'Participant' })));
+    return res.json(rows.map(r => ({ id: r.user_id, name: names[r.user_id] ?? 'Participant', role: r.role })));
   }
   if (member && req.method === 'DELETE') {
     if (!owner) return res.status(403).json({ error: 'Réservé au propriétaire du voyage' });

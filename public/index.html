@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#07080c" media="(prefers-color-scheme: dark)">
 <title>Mes voyages</title>
 <link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
@@ -703,10 +704,10 @@ const tripHue = t => Math.round(rand(t.name, 'hue') * 360); // couleur stable pa
 // Menu : mes voyages, puis ceux auxquels je participe (avec le nom de leur propriétaire)
 const tripRow = (t, id) => `<a href="#${t.id}" class="${t.id === id ? 'active' : ''}">
   <span class="tico" style="--hue:${tripHue(t)}"><i class="fa-solid ${tripIcon(t)}"></i></span>
-  <span><b>${esc(t.name)}</b><small>${t.role === 'member' ? `Partagé${t.owner ? ' par ' + esc(t.owner) : ''} · ` : ''}${t.count} souvenir${t.count > 1 ? 's' : ''}</small></span></a>`;
+  <span><b>${esc(t.name)}</b><small>${t.role !== 'owner' ? `Partagé${t.owner ? ' par ' + esc(t.owner) : ''} · ` : ''}${t.count} souvenir${t.count > 1 ? 's' : ''}</small></span></a>`;
 async function loadTrips() {
   trips = await api();
-  const id = tripId(), mine = trips.filter(t => t.role === 'owner'), shared = trips.filter(t => t.role === 'member');
+  const id = tripId(), mine = trips.filter(t => t.role === 'owner'), shared = trips.filter(t => t.role !== 'owner');
   $('#homeLink').classList.toggle('active', location.hash.length < 2);
   $('#tripList').innerHTML = `<div class="nav-label">Mes voyages</div>`
     + (mine.map(t => tripRow(t, id)).join('') || '<p class="empty-list">Aucun voyage pour l’instant.</p>')
@@ -1159,7 +1160,7 @@ function tripCard(t) {
   // Sans photo : l'icône du voyage sur un dégradé à sa couleur
   return `<a class="trip-card" href="#${t.id}" style="--hue:${tripHue(t)}">
     ${t.cover ? `<img src="${t.cover}" loading="lazy" alt="">` : `<i class="fa-solid ${tripIcon(t)}"></i>`}
-    ${t.role === 'member' ? `<span class="badge"><i class="fa-solid fa-user-group"></i> ${t.owner ? esc(t.owner) : 'Partagé'}</span>` : ''}
+    ${t.role !== 'owner' ? `<span class="badge"><i class="fa-solid fa-user-group"></i> ${t.owner ? esc(t.owner) : 'Partagé'}</span>` : ''}
     <span class="info"><b><i class="fa-solid ${tripIcon(t)}"></i> ${esc(t.name)}</b><small>${dates}</small>${t.count ? `<small>${t.count} souvenir${t.count > 1 ? 's' : ''}</small>` : ''}</span></a>`;
 }
 
@@ -1240,11 +1241,13 @@ async function showShared(token) {
 }
 
 function showTrip(trip) {
-  tripPage(false);
+  const viewer = cur.role === 'viewer';
+  tripPage(viewer);
+  if (viewer) $('#sharedBy').innerHTML = `<i class="fa-solid fa-eye"></i> Voyage partagé${cur.owner ? ' par ' + esc(cur.owner) : ''} · lecture seule`;
   // Voyage d'un autre, auquel je participe : on le signale
   if (cur.role === 'member') $('#tabs').insertAdjacentHTML('beforebegin',
     `<p class="shared-by"><i class="fa-solid fa-user-group"></i> Voyage partagé${cur.owner ? ' par ' + esc(cur.owner) : ''} · vous pouvez y ajouter des souvenirs</p>`);
-  $('#note').onsubmit = e => {
+  if (!viewer) $('#note').onsubmit = e => {
     e.preventDefault();
     const text = e.target.text.value.trim();
     if (!text) return;
@@ -1553,7 +1556,7 @@ addEventListener('keydown', e => {
 
 async function loadItems(id) {
   const rows = await api(`/api/trips?id=${id}`); // du plus récent au plus ancien
-  if (tripId() === id) renderItems(rows, false);
+  if (tripId() === id) renderItems(rows, cur?.role === 'viewer');
 }
 
 // Affiche les souvenirs d'un voyage. readonly = vue partagée : aucun bouton de suppression.
@@ -1648,6 +1651,9 @@ async function route() {
   if (share) {
     cur = null; // vue invitée : aucun voyage à moi n'est ouvert (rien à modifier)
     $('#title').classList.remove('editable');
+    // Avec un compte : le voyage rejoint « Partagés avec moi » (lecture seule) et s'ouvre comme les autres
+    const t = me && await api('/api/trips?view=' + encodeURIComponent(decodeURIComponent(share)), { method: 'POST' }).catch(() => null);
+    if (t) { location.hash = t.id; return; }
     if (me) loadTrips();
     return showShared(decodeURIComponent(share));
   }
@@ -1666,7 +1672,8 @@ async function route() {
   const owner = cur?.role === 'owner';
   $('#title').textContent = cur?.name || 'Mes voyages';
   $('#title').classList.toggle('editable', owner);
-  $('#actions').hidden = $('#delTrip').hidden = !cur;
+  $('#delTrip').hidden = !cur;
+  $('#actions').hidden = !cur || cur.role === 'viewer';
   $('#shareTrip').hidden = !owner;
   $('#delTrip').innerHTML = `<i class="fa-solid ${owner ? 'fa-trash-can' : 'fa-right-from-bracket'}"></i>`;
   $('#delTrip').setAttribute('aria-label', owner ? 'Supprimer le voyage' : 'Quitter le voyage');
@@ -1720,7 +1727,7 @@ async function loadMembers() {
   const list = await api(`/api/trips?members=1&id=${cur.id}`);
   $('#memberBox').hidden = false;
   $('#memberList').innerHTML = list.length
-    ? list.map(m => `<li><span>${esc(m.name)}</span><button data-member="${esc(m.id)}">Retirer</button></li>`).join('')
+    ? list.map(m => `<li><span>${esc(m.name)}${m.role === 'viewer' ? ' · lecture seule' : ''}</span><button data-member="${esc(m.id)}">Retirer</button></li>`).join('')
     : '<li class="none">Personne n’a encore rejoint ce voyage.</li>';
 }
 $('#shareTrip').onclick = () => { shareDlg.showModal(); showShare('share'); };
