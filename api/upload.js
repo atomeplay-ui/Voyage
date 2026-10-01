@@ -1,10 +1,13 @@
 import { handleUploadPresigned } from '@vercel/blob/client';
 import { issueSignedToken } from '@vercel/blob';
+import { requireUser } from './_db.js';
 
-const allowedContentTypes = ['image/*', 'video/*', 'audio/*', 'text/plain'];
+const allowedContentTypes = ['image/*', 'video/*', 'audio/*'];
 
 // Upload direct navigateur -> Blob via URL signée (contourne la limite de 4,5 Mo des fonctions, nécessaire pour les vidéos).
+// Réservé aux utilisateurs connectés.
 export default async function handler(req, res) {
+  if (!await requireUser(req, res)) return;
   try {
     const json = await handleUploadPresigned({
       body: req.body,

@@ -25,7 +25,36 @@ export function schema() {
       lng double precision,
       created_at timestamptz not null default now())`;
     await sql`create index if not exists media_trip on media (trip_id)`;
+    // Comptes : chaque voyage appartient à un utilisateur (identifiant Neon Auth) ; nom unique par utilisateur
+    await sql`alter table trips add column if not exists user_id text`;
+    await sql`alter table trips drop constraint if exists trips_name_key`;
+    await sql`create unique index if not exists trips_user_name on trips (user_id, name)`;
   })().catch(e => { ready = null; throw e; });
+}
+
+// Utilisateur connecté, ou null : on demande à Neon Auth à qui appartient le cookie de session.
+// ponytail: cache mémoire de 60 s par instance (évite un appel à Neon Auth par requête) ; une déconnexion
+// peut donc rester valable jusqu'à 60 s côté serveur. Passer à la vérification JWT (JWKS) si ça gêne.
+const seen = new Map();
+export async function userOf(req) {
+  const cookie = req.headers.cookie || '';
+  if (!cookie.includes('neon-auth')) return null;
+  const hit = seen.get(cookie);
+  if (hit && hit.until > Date.now()) return hit.user;
+  const r = await fetch(`${AUTH_URL}/get-session`, {
+    headers: { cookie, origin: `https://${req.headers.host}`, 'x-neon-auth-middleware': 'true' },
+  });
+  const user = r.ok ? (await r.json().catch(() => null))?.user ?? null : null;
+  if (seen.size > 500) seen.clear();
+  seen.set(cookie, { user, until: Date.now() + 60000 });
+  return user;
+}
+
+// À appeler en tête de chaque API : renvoie l'utilisateur, ou répond 401 et renvoie null
+export async function requireUser(req, res) {
+  const user = await userOf(req);
+  if (!user) res.status(401).json({ error: 'Connexion requise' });
+  return user;
 }
 
 // Store Blob privé : lien de lecture signé (1 h) pour chaque média qui a un fichier

@@ -87,6 +87,28 @@
   #tripList a:active { background: var(--glass-press); }
   #tripList a.active { background: var(--glass-hi); font-weight: 600; box-shadow: inset 0 1px 0 var(--glass-hi), 0 2px 10px rgba(0,0,0,.08); }
   .empty-list { color: var(--muted); padding: 12px; }
+  /* Compte, en bas du menu */
+  .account { display: flex; align-items: center; gap: 8px; padding: 12px 6px 0; border-top: 1px solid var(--glass-border); font-size: 13px; }
+  .account span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .account button { padding: 8px 12px; border-radius: 999px; background: var(--glass-press); font-weight: 600; white-space: nowrap; }
+
+  /* Écran de connexion (rien d'autre n'est visible tant qu'on n'est pas connecté) */
+  body.logged-out #drawer, body.logged-out #backdrop, body.logged-out #actions, body.logged-out .top .icon { display: none; }
+  .login { max-width: 360px; margin: 6vh auto 0; padding: 28px 22px; border-radius: 30px; text-align: center;
+    background: var(--surface); border: 1px solid var(--surface-line); box-shadow: var(--card-shadow); }
+  .login > i { font-size: 44px; color: var(--accent); }
+  .login h2 { margin: 12px 0 4px; font-size: 24px; letter-spacing: -.02em; }
+  .login p { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+  .login form { display: grid; gap: 10px; }
+  .login input { height: 48px; padding: 0 16px; border-radius: 14px; border: 1px solid var(--surface-line); background: rgba(127,127,127,.1); outline: none; }
+  .login input:focus { border-color: var(--accent); }
+  .login form button, .login .social { height: 48px; border-radius: 14px; font-weight: 600; }
+  .login form button { background: var(--accent); color: #fff; }
+  .login .social { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--text); color: var(--surface); }
+  .login .or { display: flex; align-items: center; gap: 10px; margin: 14px 0; color: var(--muted); font-size: 13px; }
+  .login .or::before, .login .or::after { content: ''; flex: 1; height: 1px; background: var(--surface-line); }
+  .login .login-err { margin: 12px 0 0; min-height: 18px; color: var(--danger); }
+  .login .link { margin-top: 6px; color: var(--accent); font-weight: 600; }
 
   /* Contenu */
   main { padding: 14px 10px calc(var(--bar-h) + env(safe-area-inset-bottom) + 32px); max-width: 900px; margin: auto; }
@@ -325,6 +347,7 @@
     #drawer { transform: none; }
     #backdrop, #menuBtn { display: none; }
     body { padding-left: 330px; }
+    body.logged-out { padding-left: 0; }
     #actions { left: calc(50% + 165px); }
   }
 </style>
@@ -340,6 +363,7 @@
   <h2><i class="fa-solid fa-suitcase-rolling"></i> Mes voyages</h2>
   <form id="new"><input name="name" placeholder="Nouveau voyage" required><button aria-label="Créer"><i class="fa-solid fa-plus"></i></button></form>
   <ul id="tripList"></ul>
+  <div class="account"><span id="who"></span><button id="logout"><i class="fa-solid fa-right-from-bracket"></i> Se déconnecter</button></div>
 </nav>
 <div id="backdrop"></div>
 
@@ -394,8 +418,73 @@ const currentTrip = () => decodeURIComponent(location.hash.slice(1));
 async function api(path = '/api/trips', opts = {}) {
   const r = await fetch(path, { ...opts, headers: { 'content-type': 'application/json' } });
   const json = await r.json();
+  if (r.status === 401) { showLogin(); throw new Error('Connexion requise'); } // session expirée
   if (!r.ok) { alert(json.error || 'Erreur'); throw new Error(json.error); }
   return json;
+}
+
+// Connexion (Neon Auth, via le proxy /api/auth/* : le cookie de session est posé sur notre domaine)
+let me = null;
+const authCall = async (path, body) => {
+  const r = await fetch('/api/auth/' + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
+  return { ok: r.ok, data: await r.json().catch(() => null) };
+};
+// Au retour de Google, l'adresse contient un code de vérification à échanger contre la session
+async function loadSession() {
+  const verifier = new URLSearchParams(location.search).get('neon_auth_session_verifier');
+  const { data } = await authCall('get-session' + (verifier ? `?neon_auth_session_verifier=${encodeURIComponent(verifier)}` : ''));
+  if (verifier) history.replaceState(null, '', location.pathname + location.hash);
+  return data?.user || null;
+}
+const AUTH_ERRORS = {
+  INVALID_EMAIL_OR_PASSWORD: 'E-mail ou mot de passe incorrect.',
+  USER_ALREADY_EXISTS: 'Un compte existe déjà avec cet e-mail.',
+  USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: 'Un compte existe déjà avec cet e-mail.',
+  PASSWORD_TOO_SHORT: 'Mot de passe trop court (8 caractères minimum).',
+  INVALID_EMAIL: 'Adresse e-mail invalide.',
+  INVALID_CALLBACKURL: 'Ce site n’est pas encore autorisé dans Neon Auth (domaine de confiance à ajouter).',
+};
+
+function showLogin(signup = false) {
+  me = null;
+  document.body.classList.add('logged-out');
+  setMenu(false);
+  $('#title').textContent = 'Mes voyages';
+  main.innerHTML = `<section class="login">
+    <i class="fa-solid fa-suitcase-rolling"></i>
+    <h2>${signup ? 'Créer un compte' : 'Connexion'}</h2>
+    <p>Retrouvez vos voyages et vos souvenirs.</p>
+    <button class="social" id="google"><i class="fa-brands fa-google"></i> Continuer avec Google</button>
+    <div class="or">ou</div>
+    <form id="loginForm">
+      <input name="email" type="email" autocomplete="email" placeholder="E-mail" required>
+      <input name="password" type="password" autocomplete="${signup ? 'new-password' : 'current-password'}" placeholder="Mot de passe" minlength="8" required>
+      <button>${signup ? 'Créer mon compte' : 'Se connecter'}</button>
+    </form>
+    <p class="login-err" id="loginErr" role="alert"></p>
+    <button class="link" id="swap">${signup ? 'J’ai déjà un compte' : 'Créer un compte'}</button>
+  </section>`;
+  const fail = d => { $('#loginErr').textContent = AUTH_ERRORS[d?.code] || d?.message || 'Connexion impossible. Réessayez.'; };
+  $('#swap').onclick = () => showLogin(!signup);
+  $('#google').onclick = async () => {
+    const { data } = await authCall('sign-in/social', { provider: 'google', callbackURL: location.origin + '/' });
+    if (data?.url) location.href = data.url; else fail(data);
+  };
+  $('#loginForm').onsubmit = async e => {
+    e.preventDefault();
+    const email = e.target.email.value.trim(), password = e.target.password.value;
+    const { ok, data } = await authCall(signup ? 'sign-up/email' : 'sign-in/email', signup ? { name: email.split('@')[0], email, password } : { email, password });
+    if (!ok) return fail(data);
+    boot();
+  };
+}
+
+async function boot() {
+  me = await loadSession();
+  if (!me) return showLogin();
+  document.body.classList.remove('logged-out');
+  $('#who').textContent = me.email || me.name || '';
+  route();
 }
 
 // Menu
@@ -1251,6 +1340,7 @@ addEventListener('scroll', () => {
 }, { passive: true });
 
 function route() {
+  if (!me) return;
   const trip = currentTrip();
   document.body.classList.remove('bar-min');
   $('#title').textContent = trip || 'Mes voyages';
@@ -1261,7 +1351,8 @@ function route() {
   showHome();
 }
 addEventListener('hashchange', route);
-route();
+$('#logout').onclick = async () => { await authCall('sign-out', {}); location.reload(); };
+boot();
 </script>
 </body>
 </html>
