@@ -443,6 +443,7 @@ const AUTH_ERRORS = {
   PASSWORD_TOO_SHORT: 'Mot de passe trop court (8 caractères minimum).',
   INVALID_EMAIL: 'Adresse e-mail invalide.',
   INVALID_CALLBACKURL: 'Ce site n’est pas encore autorisé dans Neon Auth (domaine de confiance à ajouter).',
+  INVALID_ORIGIN: 'Ce site n’est pas encore autorisé dans Neon Auth (domaine de confiance à ajouter).',
 };
 
 function showLogin(signup = false) {
@@ -464,7 +465,10 @@ function showLogin(signup = false) {
     <p class="login-err" id="loginErr" role="alert"></p>
     <button class="link" id="swap">${signup ? 'J’ai déjà un compte' : 'Créer un compte'}</button>
   </section>`;
-  const fail = d => { $('#loginErr').textContent = AUTH_ERRORS[d?.code] || d?.message || 'Connexion impossible. Réessayez.'; };
+  const fail = d => {
+    const code = /invalid origin/i.test(d?.message || '') ? 'INVALID_ORIGIN' : d?.code;
+    $('#loginErr').textContent = AUTH_ERRORS[code] || d?.message || 'Connexion impossible. Réessayez.';
+  };
   $('#swap').onclick = () => showLogin(!signup);
   $('#google').onclick = async () => {
     const { data } = await authCall('sign-in/social', { provider: 'google', callbackURL: location.origin + '/' });
