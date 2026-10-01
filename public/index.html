@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#eef2f8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#07080c" media="(prefers-color-scheme: dark)">
 <title>Mes voyages</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
 <style>
@@ -472,6 +474,7 @@
     <div class="new-actions"><button type="button" id="newCancel">Annuler</button><button class="primary">Créer</button></div>
   </form>
   <button class="new-btn" id="newBtn"><i class="fa-solid fa-plus"></i> Nouveau voyage</button>
+  <button class="logout" id="notif" hidden></button>
   <button class="logout" id="logout"><i class="fa-solid fa-right-from-bracket"></i> Se déconnecter</button>
 </nav>
 <div id="backdrop"></div>
@@ -655,6 +658,7 @@ function enterApp() {
   $('#whoMail').textContent = me.email || '';
   $('#avatar').textContent = me.name.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(); // initiales
   route();
+  initNotif().catch(console.error);
 }
 
 async function boot() {
@@ -1739,7 +1743,44 @@ $('#memberList').onclick = async e => {
   loadMembers();
 };
 $('#shareClose').onclick = () => shareDlg.close();
-$('#logout').onclick = async () => { await authCall('sign-out', {}); location.reload(); };
+// Notifications push : un abonnement par téléphone, activé par un bouton du menu (le navigateur exige un geste).
+// Sur iPhone, le push n'existe que si l'appli est ajoutée à l'écran d'accueil.
+const notifBtn = $('#notif');
+const pushSub = async () => (await navigator.serviceWorker?.getRegistration())?.pushManager?.getSubscription();
+async function initNotif() {
+  if (!('PushManager' in window) || !('serviceWorker' in navigator)) {
+    if (/iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone) {
+      notifBtn.hidden = false;
+      notifBtn.innerHTML = '<i class="fa-solid fa-bell"></i> Notifications : ajoutez l’appli à l’écran d’accueil';
+      notifBtn.onclick = () => alert('Dans Safari : bouton Partager, puis « Sur l’écran d’accueil ». Ouvrez ensuite l’appli depuis son icône pour activer les notifications.');
+    }
+    return;
+  }
+  await navigator.serviceWorker.register('/sw.js');
+  let sub = await pushSub();
+  // Abonnement déjà en place : on le renvoie au serveur (il a pu changer de compte ou être oublié)
+  if (sub) fetch('/api/push', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(sub) }).catch(() => {});
+  const show = () => { notifBtn.hidden = false; notifBtn.innerHTML = `<i class="fa-solid fa-bell${sub ? '' : '-slash'}"></i> Notifications ${sub ? 'activées' : 'désactivées'}`; };
+  show();
+  notifBtn.onclick = async () => {
+    if (sub) {
+      await api('/api/push', { method: 'DELETE', body: JSON.stringify({ endpoint: sub.endpoint }) });
+      await sub.unsubscribe(); sub = null;
+    } else {
+      if (await Notification.requestPermission() !== 'granted') return alert('Notifications refusées : autorisez-les dans les réglages du navigateur.');
+      const { key } = await api('/api/push');
+      sub = await (await navigator.serviceWorker.ready).pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      await api('/api/push', { method: 'POST', body: JSON.stringify(sub) });
+    }
+    show();
+  };
+}
+
+// À la déconnexion, ce téléphone ne doit plus recevoir les notifications du compte
+$('#logout').onclick = async () => {
+  const sub = await pushSub().catch(() => null);
+  if (sub) { await fetch('/api/push', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {}); await sub.unsubscribe(); }
+  await authCall('sign-out', {}); location.reload(); };
 $('#who').onclick = showProfile; // toucher son nom dans le menu permet de le modifier
 boot();
 </script>

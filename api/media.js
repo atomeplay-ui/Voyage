@@ -1,5 +1,6 @@
 import { del } from '@vercel/blob';
 import { sql, schema, num, requireUser, tripFor } from './_db.js';
+import { notifyTrip } from './_push.js';
 
 // Médias d'un voyage : ajout (propriétaire et participants) après l'envoi du fichier, ou note seule ; suppression.
 export default async function handler(req, res) {
@@ -19,6 +20,7 @@ export default async function handler(req, res) {
       insert into media (trip_id, user_id, kind, pathname, text, lat, lng)
       values (${trip.id}, ${user.id}, ${kind}, ${pathname}, ${text}, ${num(req.body.lat)}, ${num(req.body.lng)})
       returning *`;
+    await notifyTrip(trip, user, kind);
     return res.json(row);
   }
 
