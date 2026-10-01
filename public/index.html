@@ -1487,12 +1487,13 @@ async function route() {
   const join = location.hash.match(/^#join=(.+)/)?.[1];
   if (join) {
     const t = await api('/api/trips?join=' + encodeURIComponent(decodeURIComponent(join)), { method: 'POST' }).catch(() => null);
-    history.replaceState(null, '', location.pathname + (t ? '#' + t.id : ''));
+    location.hash = t ? t.id : ''; // le changement d'adresse relance route() sur le voyage rejoint (ou l'accueil)
+    return;
   }
   await loadTrips();
   const id = tripId();
   cur = trips.find(t => t.id === id) || null;
-  if (id && !cur) history.replaceState(null, '', location.pathname); // voyage inconnu ou retiré : retour à l'accueil
+  if (id && !cur) { location.hash = ''; return; } // voyage inconnu ou retiré : retour à l'accueil
   const owner = cur?.role === 'owner';
   $('#title').textContent = cur?.name || 'Mes voyages';
   $('#actions').hidden = $('#delTrip').hidden = !cur;
